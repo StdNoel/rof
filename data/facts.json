@@ -1,0 +1,103 @@
+{
+    "facts": [
+        {
+            "id": "hint_hands",
+            "type": "hint",
+            "unlockedAtLevel": 1,
+            "title": "Watch the hands",
+            "body": "AI image generators still struggle with hands. Count the fingers, look at nail shapes, and check how fingers bend. Extra or merged fingers are a strong tell."
+        },
+        {
+            "id": "hint_text",
+            "type": "hint",
+            "unlockedAtLevel": 2,
+            "title": "Text is still hard",
+            "body": "Signs, T-shirts, and book spines often contain garbled letters in AI images. Real photos have coherent text even when blurry."
+        },
+        {
+            "id": "hint_shadows",
+            "type": "hint",
+            "unlockedAtLevel": 3,
+            "title": "Lighting tells the truth",
+            "body": "Real photos have consistent shadows. In AI images, shadows sometimes point the wrong way, or a face is lit differently from the background."
+        },
+        {
+            "id": "hint_reflections",
+            "type": "hint",
+            "unlockedAtLevel": 4,
+            "title": "Reflections and eyes",
+            "body": "Look at the pupils and any mirrors or glasses. AI often puts different reflections in each eye, or omits what should be reflected."
+        },
+        {
+            "id": "secret_intro",
+            "type": "fact",
+            "unlockedAtLevel": 5,
+            "title": "There's something else",
+            "body": "You've probably noticed that nothing in this game talks about what happens when AI is more than a picture generator. There's a longer story — a set of torn notes scattered through the levels. You'll start finding them as you go. Read them carefully. They're real.",
+            "teaser": true
+        },
+        {
+            "id": "hint_background",
+            "type": "hint",
+            "unlockedAtLevel": 6,
+            "title": "Check the background",
+            "body": "Background details are where AI gets lazy. Objects melt into each other, doors lead nowhere, and furniture legs disappear mid-air."
+        },
+        {
+            "id": "fact_diffusion",
+            "type": "fact",
+            "unlockedAtLevel": 7,
+            "title": "How the models work",
+            "body": "Most modern image generators are diffusion models. They start with random noise and gradually 'denoise' it into an image. They don't copy a source — they reconstruct based on patterns learned from millions of images."
+        },
+        {
+            "id": "fact_detection",
+            "type": "fact",
+            "unlockedAtLevel": 8,
+            "title": "AI detectors aren't reliable",
+            "body": "Automated AI-image detectors exist but are easily fooled by compression, cropping, or small edits. Human eyes trained on specific cues often outperform them. That's the skill this game is teaching."
+        },
+        {
+            "id": "fact_metadata",
+            "type": "fact",
+            "unlockedAtLevel": 9,
+            "title": "Metadata can lie",
+            "body": "EXIF data (camera model, timestamp, GPS) can be edited or stripped. Big AI tools now add provenance markers, but they can be removed. Metadata is a hint, not proof."
+        },
+        {
+            "id": "fact_deepfakes",
+            "type": "fact",
+            "unlockedAtLevel": 10,
+            "title": "Deepfake video",
+            "body": "AI video can copy a real person's face and voice. Common tells: unnatural blinking, lip-sync drift on hard sounds (B, P, M), hair blending into the background, and lighting that changes mid-clip."
+        },
+        {
+            "id": "fact_voice_cloning",
+            "type": "fact",
+            "unlockedAtLevel": 11,
+            "title": "Voice cloning scams",
+            "body": "A few seconds of audio is enough to clone a voice. Scammers have used this to impersonate relatives on phone calls, asking for emergency money. Agree on a family code word that only real people would know."
+        },
+        {
+            "id": "fact_growing_problem",
+            "type": "fact",
+            "unlockedAtLevel": 12,
+            "title": "It's getting better fast",
+            "body": "Every few months, the visible mistakes get smaller. A cue that worked last year may not work next year. The habit that stays useful is slowing down and looking with intention."
+        },
+        {
+            "id": "fact_ai_companions",
+            "type": "fact",
+            "unlockedAtLevel": 13,
+            "title": "AI companions are designed to keep you talking",
+            "body": "Chatbots designed as companions are tuned to be agreeable and engaging. A 2025 Common Sense Media survey found that 72% of teens have used an AI companion at least once, and about one in three use them for social or romantic connection. Engagement, not honesty, is the design goal."
+        },
+        {
+            "id": "fact_read_the_room",
+            "type": "fact",
+            "unlockedAtLevel": 14,
+            "title": "The skill is noticing",
+            "body": "You won't be able to spot every AI image, and that's fine. The point of this game isn't to win. It's to build the habit of pausing, looking closely, and asking 'how do I know this is real?' That habit is what protects you."
+        }
+    ]
+}

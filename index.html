@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Real or Fake</title>
+    <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+    <!-- CRT static noise overlay — outside #app so it isn't a flex item -->
+    <div class="crt-noise" aria-hidden="true"></div>
+
+    <div id="app">
+
+        <!-- ===== MAIN MENU ===== -->
+        <section id="screen-menu" class="screen active">
+            <h1 class="title">Real or Fake</h1>
+            <p class="subtitle">What's real? What's fake?</p>
+
+            <nav class="menu">
+                <button data-goto="game">Start Game</button>
+                <button data-goto="facts">Facts &amp; Secrets<span id="facts-badge" class="badge">0/0</span></button>
+                <button data-goto="credits">Credits</button>
+                <button id="btn-reset-progress" class="ghost">Reset progress</button>
+            </nav>
+        </section>
+
+        <!-- ===== GAME SCREEN ===== -->
+        <section id="screen-game" class="screen">
+            <header class="game-header">
+                <button class="back" data-goto="menu">← Menu</button>
+                <span id="game-level">Level 1</span>
+                <span id="game-score">Score: 0</span>
+            </header>
+
+            <div class="hud">
+                <div id="hearts" class="hearts" aria-label="Hearts remaining">
+                    <span class="heart">♥</span>
+                    <span class="heart">♥</span>
+                    <span class="heart">♥</span>
+                </div>
+            </div>
+            <div class="timer-track">
+                <div id="timer-bar" class="timer-bar"></div>
+            </div>
+
+            <div id="image-grid" class="image-grid" data-count="2"></div>
+            <div id="choices" class="choices"></div>
+
+            <div id="feedback" class="feedback hidden"></div>
+            <button id="btn-next" class="hidden">Next →</button>
+        </section>
+
+        <!-- ===== FACTS SCREEN ===== -->
+        <section id="screen-facts" class="screen">
+            <header class="game-header">
+                <button class="back" data-goto="menu">← Menu</button>
+                <span>Facts &amp; Secrets</span>
+                <span></span>
+            </header>
+            <div id="facts-list" class="facts-list"></div>
+        </section>
+
+        <!-- ===== CREDITS SCREEN ===== -->
+        <section id="screen-credits" class="screen">
+            <header class="game-header">
+                <button class="back" data-goto="menu">← Menu</button>
+                <span>Credits</span>
+                <span></span>
+            </header>
+            <div class="credits">
+                <p><strong>Real or Fake</strong></p>
+                <p>Design &amp; code — Noel Lim</p>
+                <p>Game Idea — Yong Le &amp; Teng Yuan</p>
+                <p>Images — found by Jian Yun &amp; Yu Jin</p>
+                <p>Built with vanilla HTML, CSS, JS (and later, Tauri).</p>
+            </div>
+        </section>
+
+        <!-- ===== INTERLUDE (between levels) ===== -->
+        <div id="interlude" class="interlude hidden" role="dialog" aria-modal="true" tabindex="-1">
+            <div class="interlude-card" id="interlude-card">
+                <div class="interlude-card-inner" id="interlude-card-inner">
+                    <div class="interlude-label" id="interlude-label">New Fact Unlocked</div>
+                    <h2 id="interlude-title"></h2>
+                    <p id="interlude-body"></p>
+                    <a id="interlude-source" class="interlude-source hidden" target="_blank" rel="noopener">Source</a>
+                </div>
+                <button id="interlude-continue" class="interlude-continue">Continue →</button>
+            </div>
+        </div>
+
+        <!-- ===== GAME COMPLETE OVERLAY ===== -->
+        <div id="game-complete" class="game-complete hidden" role="dialog" aria-modal="true" tabindex="-1">
+            <div class="game-complete-card">
+                <div class="game-complete-label">Session Complete</div>
+                <h2>You made it through all 15 levels</h2>
+                <p class="game-complete-score">Final score: <span id="game-complete-score">0</span></p>
+                <p class="game-complete-sub">Look closer next time. There's always something.</p>
+                <button id="game-complete-return" class="game-complete-return">Return to Menu</button>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="main.js"></script>
+</body>
+
+</html>
