@@ -483,7 +483,7 @@ side and pass the file list to the frontend, so adding a set becomes
 
 ## Credits
 
-- **Design & code** — Noel Lim
-- **Game idea** — Yong Le & Teng Yuan
-- **Images** — found by Jian Yun & Yu Jin
-- **Built with** — vanilla HTML, CSS, JavaScript (Tauri port planned)
+- **Design & code** — Lim Young Liang (Noel Lim)
+- **Game idea** — Tan Yong Le & Khor Teng Yuan & Lim Guan Ting
+- **Images** — found by Ong Jian Yun & Ooi Yu Jin
+- **Built with** — vanilla HTML, CSS, JavaScript

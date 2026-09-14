@@ -1,0 +1,28 @@
+[
+    {
+        "id": "q_01",
+        "level": 1,
+        "mode": 0,
+        "images": [
+            {
+                "id": "img1",
+                "src": "images/level1_1.png"
+            }
+        ],
+        "answer": "fake",
+        "explanation": ""
+    },
+    {
+        "id": "q_02",
+        "level": 2,
+        "mode": 0,
+        "images": [
+            {
+                "id": "img1",
+                "src": "images/level2_1.png"
+            }
+        ],
+        "answer": "real",
+        "explanation": ""
+    }
+]
