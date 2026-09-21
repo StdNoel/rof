@@ -458,13 +458,13 @@ function choicesForMode(q) {
         case 2:
             return q.images.map((img, i) => ({
                 value: img.id,
-                text: `${labelFor(i)} is AI`,
+                text: `${labelFor(i)} is Fake`,
             }));
         case 3:
             return [
                 ...q.images.map((img, i) => ({
                     value: img.id,
-                    text: `${labelFor(i)} is AI`,
+                    text: `${labelFor(i)} is Fake`,
                 })),
                 { value: "all_real", text: "All real" },
                 { value: "all_fake", text: "All fake" },
@@ -480,7 +480,7 @@ function renderMultiSelectChoices(q, container) {
     q.images.forEach((img, i) => {
         const b = document.createElement("button");
         b.className = "choice toggle";
-        b.textContent = `${labelFor(i)} is AI`;
+        b.textContent = `${labelFor(i)} is Fake`;
         b.dataset.imageId = img.id;
         b.addEventListener("click", () => b.classList.toggle("selected"));
         container.appendChild(b);
@@ -614,7 +614,7 @@ function revealAnswer(q) {
     const aiIds = aiImageIds(q);
     document.querySelectorAll(".card").forEach(card => {
         const id = card.dataset.imageId;
-        card.classList.add(aiIds.has(id) ? "is-ai" : "is-real");
+        card.classList.add(aiIds.has(id) ? "is-fake" : "is-real");
     });
 }
 

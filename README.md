@@ -1,9 +1,10 @@
 # Real or Fake
 
-A browser-based quiz game that challenges players to tell real photographs
-apart from AI-generated images. Built with vanilla HTML, CSS, and JavaScript,
-and intended to be wrapped with **Tauri** (Rust backend) later for a
-native desktop release.
+A browser-based quiz game that challenges players to spot misinformation,
+misleading edits, and out-of-context media — and to practise the habits of
+fact-checking. Built with vanilla HTML, CSS, and JavaScript, and intended
+to be wrapped with **Tauri** (Rust backend) later for a native desktop
+release.
 
 ---
 
@@ -17,13 +18,13 @@ native desktop release.
    and/or videos) plus a set of answer buttons that depend on the question's
    **mode** (see table below).
 4. **Answer** — the player picks one option (or, for Mode 4, checks every
-   item they believe is AI and presses **Submit**). A timer bar runs across
-   the top of the game screen.
+   item they believe is misleading and presses **Submit**). A timer bar
+   runs across the top of the game screen.
    - **Correct** → +10 score
    - **Wrong or timed out** → −1 heart
 5. **Reveal** — after answering, every item is outlined:
-   - **Green outline** → item is real
-   - **Red outline** → item is AI-generated
+   - **Green outline** → item is trustworthy / unmanipulated
+   - **Red outline** → item is misleading, fabricated, or out of context
 6. **Interlude** — after each level, one or more cards appear:
    - A **torn note** (only on levels 6–13, and only if a note is still
      undiscovered in this session)
@@ -42,9 +43,8 @@ native desktop release.
 
 ## Media Setup
 
-This is the most important section if you're adding content. Every image
-and video goes into **one flat folder**, and every filename follows a
-strict pattern so the game can find it.
+Every image and video goes into **one flat folder**, and every filename
+follows a strict pattern so the game can find it.
 
 ### Where files go
 
@@ -98,8 +98,7 @@ are **not supported**. Anything else is skipped and logged as a warning in
 the browser console.
 
 **Why only these two:**
-- `.jpg` — universal support, small files, no alpha channel to leak
-  metadata about how the image was made.
+- `.jpg` — universal support and small files.
 - `.mp4` (H.264) — the only video format that plays identically in every
   modern browser without fallbacks.
 
@@ -125,7 +124,7 @@ the browser console.
 
 ### How each mode uses the files
 
-**Mode 1 — single real/fake** (1 item)
+**Mode 1 — single item: trustworthy or misleading?** (1 item)
 ```
 set1_q1.jpg
 ```
@@ -136,11 +135,11 @@ set1_q1.jpg
   "mode": 1,
   "images": [{ "id": "img1", "src": "data/assets/set1_q1.jpg" }],
   "answer": "fake",
-  "explanation": "The whiskers merge into the fur."
+  "explanation": "The sign's letters are misspelled and don't match any real street."
 }
 ```
 
-**Mode 2 — pick which of N is AI** (2–4 items, exactly one AI)
+**Mode 2 — pick which of N is misleading** (2–4 items, exactly one is)
 ```
 set1_q2_a.jpg
 set1_q2_b.jpg
@@ -157,11 +156,11 @@ set1_q2_c.jpg
     { "id": "c", "src": "data/assets/set1_q2_c.jpg" }
   ],
   "answer": "b",
-  "explanation": "B has merged fingers."
+  "explanation": "B shows the same photo as A, cropped to hide the original crowd."
 }
 ```
 
-**Mode 3 — pick the AI, or All Real / All Fake**
+**Mode 3 — pick the misleading item, or All Real / All Fake**
 Same file layout as Mode 2, but `answer` can also be `"all_real"` or
 `"all_fake"`.
 ```json
@@ -174,11 +173,11 @@ Same file layout as Mode 2, but `answer` can also be `"all_real"` or
     { "id": "b", "src": "data/assets/set1_q3_b.jpg" }
   ],
   "answer": "all_real",
-  "explanation": "Both photos have consistent lighting and readable text."
+  "explanation": "Both photos match the original source; neither was edited."
 }
 ```
 
-**Mode 4 — pick every AI** (multi-select, more than one AI)
+**Mode 4 — pick every misleading item** (multi-select, more than one)
 ```json
 {
   "id": "q_004",
@@ -190,7 +189,7 @@ Same file layout as Mode 2, but `answer` can also be `"all_real"` or
     { "id": "c", "src": "data/assets/set1_q4_c.jpg" }
   ],
   "answer": ["a", "c"],
-  "explanation": "A and C are AI; B is real."
+  "explanation": "A is a crop that changes the meaning; C is a flipped photo. B is the original."
 }
 ```
 
@@ -202,7 +201,7 @@ Same file layout as Mode 2, but `answer` can also be `"all_real"` or
   "mode": 1,
   "images": [{ "id": "img1", "src": "data/assets/set1_q5.mp4" }],
   "answer": "fake",
-  "explanation": "The face flickers between frames."
+  "explanation": "The clip is sped up — the crowd's motion doesn't match the ambient audio."
 }
 ```
 
@@ -241,13 +240,19 @@ Modes are identified by **number** in the question JSON files.
 
 | Mode | Name | Media items | Answer Buttons | `answer` shape |
 |:----:|------|:-----------:|----------------|----------------|
-|  1   | Single: Real or Fake          | 1   | `Real`, `Fake`                              | `"real"` or `"fake"` |
-|  2   | Pick the AI (one of N)        | 2–4 | `A is AI`, `B is AI`, `C is AI`, `D is AI`  | item `id` |
-|  3   | Pick the AI, or All Real/Fake | 2–4 | Mode 2 buttons + `All real`, `All fake`     | item `id`, `"all_real"`, `"all_fake"` |
-|  4   | Pick every AI (multi-select)  | 2–4 | Per-item toggles + `Submit`                 | array of item `id`s |
+|  1   | Single: Trustworthy or Misleading | 1   | `Real`, `Fake`                              | `"real"` or `"fake"` |
+|  2   | Pick the misleading item (one of N) | 2–4 | `A is misleading`, `B is misleading`, … | item `id` |
+|  3   | Pick the misleading item, or All Real / All Fake | 2–4 | Mode 2 buttons + `All real`, `All fake`     | item `id`, `"all_real"`, `"all_fake"` |
+|  4   | Pick every misleading item (multi-select) | 2–4 | Per-item toggles + `Submit`                 | array of item `id`s |
 
 Adding a new mode is a three-line change: one branch in
 `choicesForMode()`, one in `isCorrect()`, one in `aiImageIds()`.
+
+> The labels on the buttons (`"Real"` / `"Fake"` / `"A is AI"`) are
+> controlled in the `choicesForMode()` function in `main.js`. If you want
+> the wording to read differently for the new topic — e.g. `"Trustworthy"`
+> / `"Misleading"`, or `"A is misleading"` instead of `"A is AI"` — that's
+> a one-line edit per button.
 
 ---
 
@@ -308,14 +313,17 @@ Below 700px viewport width everything collapses to one column.
 
 Two kinds of collectible content.
 
-**Facts** (`data/facts.json`) — hints and general knowledge about AI
-generation. Each has an `unlockedAtLevel`; the interlude for that level
-shows the fact, and it becomes readable in the Facts screen afterward.
+**Facts** (`data/facts.json`) — practical tips and general knowledge
+about spotting misinformation: manipulated images, out-of-context
+photos, cropped or flipped media, misleading headlines, doctored
+screenshots, and the like. Each has an `unlockedAtLevel`; the interlude
+for that level shows the fact, and it becomes readable in the Facts
+screen afterward.
 
 **Torn notes** (`data/secrets.json`) — fragments of a longer, real story
-about AI companion chatbots and the harms they have caused. These appear
-as torn-paper cards **before** the fact slide, on levels **6–13**, one
-per level, drawn in a random order from whatever the player hasn't yet
+about the harms caused by online misinformation. These appear as
+torn-paper cards **before** the fact slide, on levels **6–13**, one per
+level, drawn in a random order from whatever the player hasn't yet
 found.
 
 Torn notes are intentionally hidden content. On a fresh save, they show
@@ -464,18 +472,20 @@ side and pass the file list to the frontend, so adding a set becomes
 
 - [x] Menu, Game, Facts, Credits screens
 - [x] Modes 1–4 with dynamic media counts
-- [x] Local progress persistence (score, level, unlocked content)
+- [x] Local progress persistence (unlocked content only)
 - [x] Multi-file question-set loader (missing sets are skipped)
 - [x] Randomization strategy (Fisher–Yates shuffle at session start)
 - [x] Video (`.mp4`) rendering support (timer waits for video to end)
-- [x] 14 facts in `data/facts.json`
-- [x] 8 secrets in `data/secrets.json`, distributed across levels 6–13
+- [x] Facts and torn notes in `data/facts.json` and `data/secrets.json`
 - [x] Hearts system (3 hearts, −1 on wrong/timeout, jumpscare at 0)
 - [x] Per-question timer with draining bar, pause on tab-away
 - [x] Between-level interlude cards (note first, then fact)
 - [x] Game Complete screen after level 15
 - [x] Session-based run: 15 levels, score resets on each new game
 - [ ] Populate `data/questions_1.json` through `questions_4.json` with real content
+- [ ] Rewrite `data/facts.json` around misinformation and fact-checking
+- [ ] Rewrite `data/secrets.json` around real misinformation incidents
+- [ ] Update the answer-button labels in `main.js` to match the new topic
 - [ ] Animation polish (card transitions, score pop, heart-loss shake)
 - [ ] Port to Tauri (Rust-side persistence + asset bundling)
 
