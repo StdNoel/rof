@@ -1,28 +1,177 @@
-[
-    {
-        "id": "q_01",
-        "level": 1,
-        "mode": 0,
-        "images": [
-            {
-                "id": "img1",
-                "src": "images/level1_1.png"
-            }
-        ],
-        "answer": "fake",
-        "explanation": ""
-    },
-    {
-        "id": "q_02",
-        "level": 2,
-        "mode": 0,
-        "images": [
-            {
-                "id": "img1",
-                "src": "images/level2_1.png"
-            }
-        ],
-        "answer": "real",
-        "explanation": ""
-    }
-]
+{
+    "questions": [
+        {
+            "id": "q_001",
+            "level": 1,
+            "difficulty": "easy",
+            "mode": 1,
+            "images": [
+                {
+                    "id": "img1",
+                    "src": "data/assets/set1_q1.jpg"
+                }
+            ],
+            "answer": "fake",
+            "explanation": "The real street is Pennsylvania Avenue; this sign adds an extra N. Misspellings on official signs are a common fake tell.",
+            "source": "Poynter / IFCN"
+        },
+        {
+            "id": "q_002",
+            "level": 2,
+            "difficulty": "easy",
+            "mode": 2,
+            "images": [
+                {
+                    "id": "a",
+                    "src": "data/assets/set1_q2_a.jpg"
+                },
+                {
+                    "id": "b",
+                    "src": "data/assets/set1_q2_b.jpg"
+                }
+            ],
+            "answer": "b",
+            "explanation": "The line is from Franklin D. Roosevelt's 1933 inaugural address, not Abraham Lincoln. Search the exact quote to find the original speech.",
+            "source": "FDR Presidential Library"
+        },
+        {
+            "id": "q_003",
+            "level": 3,
+            "difficulty": "easy",
+            "mode": 3,
+            "images": [
+                {
+                    "id": "a",
+                    "src": "data/assets/set1_q3_a.jpg"
+                },
+                {
+                    "id": "b",
+                    "src": "data/assets/set1_q3_b.jpg"
+                }
+            ],
+            "answer": "a",
+            "explanation": "A is mirrored: the letters on the sign run backwards. Horizontal flips are a cheap edit that defeats many reverse-image searches.",
+            "source": "Poynter / IFCN"
+        },
+        {
+            "id": "q_004",
+            "level": 4,
+            "difficulty": "medium",
+            "mode": 4,
+            "images": [
+                {
+                    "id": "a",
+                    "src": "data/assets/set1_q4_a.jpg"
+                },
+                {
+                    "id": "b",
+                    "src": "data/assets/set1_q4_b.jpg"
+                },
+                {
+                    "id": "c",
+                    "src": "data/assets/set1_q4_c.jpg"
+                }
+            ],
+            "answer": [
+                "a",
+                "c"
+            ],
+            "explanation": "A is a Manila flood photo recaptioned as Miami - a storefront still reads MANILA. C is a tight crop of a small group presented as thousands. B is a real NWS alert.",
+            "source": "Poynter / IFCN"
+        },
+        {
+            "id": "q_005",
+            "level": 5,
+            "difficulty": "medium",
+            "mode": 1,
+            "images": [
+                {
+                    "id": "img1",
+                    "src": "data/assets/set1_q5.jpg"
+                }
+            ],
+            "answer": "fake",
+            "explanation": "The headline says proves, but the article says the findings were inconclusive. Headlines are written for clicks - read the piece before sharing.",
+            "source": "Poynter / IFCN"
+        },
+        {
+            "id": "q_006",
+            "level": 6,
+            "difficulty": "medium",
+            "mode": 2,
+            "images": [
+                {
+                    "id": "a",
+                    "src": "data/assets/set1_q6_a.jpg"
+                },
+                {
+                    "id": "b",
+                    "src": "data/assets/set1_q6_b.jpg"
+                }
+            ],
+            "answer": "a",
+            "explanation": "A is a tight crop of B. The full frame shows a calm press briefing; the crop removes that context and changes the story.",
+            "source": "Poynter / IFCN"
+        },
+        {
+            "id": "q_007",
+            "level": 7,
+            "difficulty": "hard",
+            "mode": 3,
+            "images": [
+                {
+                    "id": "a",
+                    "src": "data/assets/set1_q7_a.jpg"
+                },
+                {
+                    "id": "b",
+                    "src": "data/assets/set1_q7_b.jpg"
+                }
+            ],
+            "answer": "b",
+            "explanation": "In 2019 an official forecast map was altered with a marker to extend Hurricane Dorian's track toward Alabama. The National Weather Service corrected it.",
+            "source": "The New York Times, 2019"
+        },
+        {
+            "id": "q_008",
+            "level": 8,
+            "difficulty": "hard",
+            "mode": 4,
+            "images": [
+                {
+                    "id": "a",
+                    "src": "data/assets/set1_q8_a.jpg"
+                },
+                {
+                    "id": "b",
+                    "src": "data/assets/set1_q8_b.jpg"
+                },
+                {
+                    "id": "c",
+                    "src": "data/assets/set1_q8_c.jpg"
+                }
+            ],
+            "answer": [
+                "a",
+                "c"
+            ],
+            "explanation": "A misspells the outlet's own name; C carries an impossible date. B uses a real outlet, a plausible date, and names the agency that issued the alert.",
+            "source": "Poynter / IFCN"
+        },
+        {
+            "id": "q_009",
+            "level": 9,
+            "difficulty": "hard",
+            "mode": 1,
+            "images": [
+                {
+                    "id": "img1",
+                    "src": "data/assets/set1_q9.jpg"
+                }
+            ],
+            "answer": "fake",
+            "explanation": "In February 2024 a Hong Kong finance worker was tricked by a deepfake video call and transferred about US$25 million. Confirm large transfers through a second channel.",
+            "source": "CNN"
+        }
+    ]
+}

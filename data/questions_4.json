@@ -1,0 +1,189 @@
+{
+    "questions": [
+        {
+            "id": "q_028",
+            "level": 1,
+            "difficulty": "easy",
+            "mode": 4,
+            "images": [
+                {
+                    "id": "a",
+                    "src": "data/assets/set4_q1_a.jpg"
+                },
+                {
+                    "id": "b",
+                    "src": "data/assets/set4_q1_b.jpg"
+                },
+                {
+                    "id": "c",
+                    "src": "data/assets/set4_q1_c.jpg"
+                }
+            ],
+            "answer": [
+                "a",
+                "c"
+            ],
+            "explanation": "A asks for gift cards from a non-official handle; C carries an impossible date. Real charities publish verified donation pages and never demand gift cards or crypto.",
+            "source": "UNICEF"
+        },
+        {
+            "id": "q_029",
+            "level": 2,
+            "difficulty": "easy",
+            "mode": 1,
+            "images": [
+                {
+                    "id": "img1",
+                    "src": "data/assets/set4_q2.jpg"
+                }
+            ],
+            "answer": "fake",
+            "explanation": "The Momo challenge panic was a hoax; police and fact-checkers found no evidence of the claimed deaths. Chain messages that demand urgent forwarding and cite no authority are a classic hoax pattern.",
+            "source": "BBC News, 2019"
+        },
+        {
+            "id": "q_030",
+            "level": 3,
+            "difficulty": "easy",
+            "mode": 2,
+            "images": [
+                {
+                    "id": "a",
+                    "src": "data/assets/set4_q3_a.jpg"
+                },
+                {
+                    "id": "b",
+                    "src": "data/assets/set4_q3_b.jpg"
+                }
+            ],
+            "answer": "a",
+            "explanation": "A repeats a claim the WHO and every major health agency rejected; viruses do not travel on radio waves. B is the WHO's real account.",
+            "source": "WHO"
+        },
+        {
+            "id": "q_031",
+            "level": 4,
+            "difficulty": "medium",
+            "mode": 3,
+            "images": [
+                {
+                    "id": "a",
+                    "src": "data/assets/set4_q4_a.jpg"
+                },
+                {
+                    "id": "b",
+                    "src": "data/assets/set4_q4_b.jpg"
+                }
+            ],
+            "answer": "b",
+            "explanation": "B still shows a 2019 London placard while the caption claims Madrid 2024. Recycled protest footage is used to make movements look bigger or more current.",
+            "source": "AP Fact Check"
+        },
+        {
+            "id": "q_032",
+            "level": 5,
+            "difficulty": "medium",
+            "mode": 4,
+            "images": [
+                {
+                    "id": "a",
+                    "src": "data/assets/set4_q5_a.jpg"
+                },
+                {
+                    "id": "b",
+                    "src": "data/assets/set4_q5_b.jpg"
+                },
+                {
+                    "id": "c",
+                    "src": "data/assets/set4_q5_c.jpg"
+                }
+            ],
+            "answer": [
+                "a",
+                "c"
+            ],
+            "explanation": "A is 2020 Izmir rubble recaptioned as Japan 2024; C is a distorted AI-style image with unreadable signage. B is a real Japan Meteorological Agency intensity map with a matching date and region.",
+            "source": "JMA / AP"
+        },
+        {
+            "id": "q_033",
+            "level": 6,
+            "difficulty": "medium",
+            "mode": 1,
+            "images": [
+                {
+                    "id": "img1",
+                    "src": "data/assets/set4_q6.jpg"
+                }
+            ],
+            "answer": "real",
+            "explanation": "A real report debunking a recurring hoax. Rowan Atkinson has repeatedly been falsely reported dead; this story quotes his representatives.",
+            "source": "BBC News"
+        },
+        {
+            "id": "q_034",
+            "level": 7,
+            "difficulty": "hard",
+            "mode": 2,
+            "images": [
+                {
+                    "id": "a",
+                    "src": "data/assets/set4_q7_a.jpg"
+                },
+                {
+                    "id": "b",
+                    "src": "data/assets/set4_q7_b.jpg"
+                }
+            ],
+            "answer": "b",
+            "explanation": "B invents a deadline and uses an unofficial account; A names an official office and points to the government's real registration site. Check dates and domains on an official elections site.",
+            "source": "AP Fact Check"
+        },
+        {
+            "id": "q_035",
+            "level": 8,
+            "difficulty": "hard",
+            "mode": 3,
+            "images": [
+                {
+                    "id": "a",
+                    "src": "data/assets/set4_q8_a.jpg"
+                },
+                {
+                    "id": "b",
+                    "src": "data/assets/set4_q8_b.jpg"
+                }
+            ],
+            "answer": "all_fake",
+            "explanation": "A is a warped composite with melting reflections; B is an AI-generated fake of the Hollywood sign. Cinematic images with no source or location should be treated as generated until proven otherwise.",
+            "source": "Poynter / IFCN"
+        },
+        {
+            "id": "q_036",
+            "level": 9,
+            "difficulty": "hard",
+            "mode": 4,
+            "images": [
+                {
+                    "id": "a",
+                    "src": "data/assets/set4_q9_a.jpg"
+                },
+                {
+                    "id": "b",
+                    "src": "data/assets/set4_q9_b.jpg"
+                },
+                {
+                    "id": "c",
+                    "src": "data/assets/set4_q9_c.jpg"
+                }
+            ],
+            "answer": [
+                "a",
+                "b",
+                "c"
+            ],
+            "explanation": "All three accounts use near-identical wording, brand-new handles, and no official source - textbook astroturfing. Real laws are published on government sites; check the primary source, not the echo.",
+            "source": "Poynter / IFCN"
+        }
+    ]
+}

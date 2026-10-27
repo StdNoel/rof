@@ -1,0 +1,181 @@
+{
+    "questions": [
+        {
+            "id": "q_019",
+            "level": 1,
+            "difficulty": "easy",
+            "mode": 3,
+            "images": [
+                {
+                    "id": "a",
+                    "src": "data/assets/set3_q1_a.jpg"
+                },
+                {
+                    "id": "b",
+                    "src": "data/assets/set3_q1_b.jpg"
+                }
+            ],
+            "answer": "a",
+            "explanation": "A is mirrored - the calligraphy and the building's asymmetrical details are reversed. Flipping is a common edit used to dodge reverse-image search.",
+            "source": "Poynter / IFCN"
+        },
+        {
+            "id": "q_020",
+            "level": 2,
+            "difficulty": "easy",
+            "mode": 4,
+            "images": [
+                {
+                    "id": "a",
+                    "src": "data/assets/set3_q2_a.jpg"
+                },
+                {
+                    "id": "b",
+                    "src": "data/assets/set3_q2_b.jpg"
+                },
+                {
+                    "id": "c",
+                    "src": "data/assets/set3_q2_c.jpg"
+                }
+            ],
+            "answer": [
+                "a",
+                "c"
+            ],
+            "explanation": "A carries an impossible date and names no study; C misspells its own masthead and the article undercuts the headline. B is a plausible local report with specifics.",
+            "source": "Poynter / IFCN"
+        },
+        {
+            "id": "q_021",
+            "level": 3,
+            "difficulty": "easy",
+            "mode": 1,
+            "images": [
+                {
+                    "id": "img1",
+                    "src": "data/assets/set3_q3.jpg"
+                }
+            ],
+            "answer": "real",
+            "explanation": "This is NASA's published global temperature chart and matches the official series. Check the source and axis before judging a trend.",
+            "source": "Poynter"
+        },
+        {
+            "id": "q_022",
+            "level": 4,
+            "difficulty": "medium",
+            "mode": 2,
+            "images": [
+                {
+                    "id": "a",
+                    "src": "data/assets/set3_q4_a.jpg"
+                },
+                {
+                    "id": "b",
+                    "src": "data/assets/set3_q4_b.jpg"
+                }
+            ],
+            "answer": "a",
+            "explanation": "In A the same few faces are copy-pasted across the crowd. Look for identical poses and repeated details; compositing is often used to inflate crowd size.",
+            "source": "Poynter / IFCN"
+        },
+        {
+            "id": "q_023",
+            "level": 5,
+            "difficulty": "medium",
+            "mode": 3,
+            "images": [
+                {
+                    "id": "a",
+                    "src": "data/assets/set3_q5_a.jpg"
+                },
+                {
+                    "id": "b",
+                    "src": "data/assets/set3_q5_b.jpg"
+                }
+            ],
+            "answer": "a",
+            "explanation": "A has a record label and shading added on top of the official map; the original forecast shows nothing of the sort. Compare against the issuing agency's own post.",
+            "source": "AP Fact Check"
+        },
+        {
+            "id": "q_024",
+            "level": 6,
+            "difficulty": "medium",
+            "mode": 4,
+            "images": [
+                {
+                    "id": "a",
+                    "src": "data/assets/set3_q6_a.jpg"
+                },
+                {
+                    "id": "b",
+                    "src": "data/assets/set3_q6_b.jpg"
+                },
+                {
+                    "id": "c",
+                    "src": "data/assets/set3_q6_c.jpg"
+                }
+            ],
+            "answer": [
+                "b",
+                "c"
+            ],
+            "explanation": "B uses a handle the Met Office does not own; C has an impossible date. A is the real account with a plausible, sourced warning.",
+            "source": "Met Office"
+        },
+        {
+            "id": "q_025",
+            "level": 7,
+            "difficulty": "hard",
+            "mode": 1,
+            "images": [
+                {
+                    "id": "img1",
+                    "src": "data/assets/set3_q7.jpg"
+                }
+            ],
+            "answer": "fake",
+            "explanation": "This viral image of Pope Francis in a puffer jacket was made with Midjourney, not photographed. AI images often get hands, jewellery, and small text subtly wrong.",
+            "source": "BBC News, 2023"
+        },
+        {
+            "id": "q_026",
+            "level": 8,
+            "difficulty": "hard",
+            "mode": 2,
+            "images": [
+                {
+                    "id": "a",
+                    "src": "data/assets/set3_q8_a.jpg"
+                },
+                {
+                    "id": "b",
+                    "src": "data/assets/set3_q8_b.jpg"
+                }
+            ],
+            "answer": "b",
+            "explanation": "B has a blurred face and no source. Verify a clip against the organisation's own channel.",
+            "source": "Poynter / IFCN"
+        },
+        {
+            "id": "q_027",
+            "level": 9,
+            "difficulty": "hard",
+            "mode": 3,
+            "images": [
+                {
+                    "id": "a",
+                    "src": "data/assets/set3_q9_a.jpg"
+                },
+                {
+                    "id": "b",
+                    "src": "data/assets/set3_q9_b.jpg"
+                }
+            ],
+            "answer": "a",
+            "explanation": "A shows six fingers on one hand - a well-known AI generation artefact. Count fingers, check ears and glasses, and look for text that melts into the background.",
+            "source": "Poynter / IFCN"
+        }
+    ]
+}

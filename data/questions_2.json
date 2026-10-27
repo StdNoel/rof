@@ -1,0 +1,181 @@
+{
+    "questions": [
+        {
+            "id": "q_010",
+            "level": 1,
+            "difficulty": "easy",
+            "mode": 2,
+            "images": [
+                {
+                    "id": "a",
+                    "src": "data/assets/set2_q1_a.jpg"
+                },
+                {
+                    "id": "b",
+                    "src": "data/assets/set2_q1_b.jpg"
+                }
+            ],
+            "answer": "b",
+            "explanation": "B's handle is not the BBC's real account, even though it shows a blue tick. Check the handle character by character - display names are easy to copy.",
+            "source": "BBC"
+        },
+        {
+            "id": "q_011",
+            "level": 2,
+            "difficulty": "easy",
+            "mode": 3,
+            "images": [
+                {
+                    "id": "a",
+                    "src": "data/assets/set2_q2_a.jpg"
+                },
+                {
+                    "id": "b",
+                    "src": "data/assets/set2_q2_b.jpg"
+                }
+            ],
+            "answer": "b",
+            "explanation": "B has a storefront sign reading JAKARTA while the caption says Beirut. Old or foreign footage is routinely recaptioned.",
+            "source": "AP Fact Check"
+        },
+        {
+            "id": "q_012",
+            "level": 3,
+            "difficulty": "easy",
+            "mode": 4,
+            "images": [
+                {
+                    "id": "a",
+                    "src": "data/assets/set2_q3_a.jpg"
+                },
+                {
+                    "id": "b",
+                    "src": "data/assets/set2_q3_b.jpg"
+                },
+                {
+                    "id": "c",
+                    "src": "data/assets/set2_q3_c.jpg"
+                }
+            ],
+            "answer": [
+                "b",
+                "c"
+            ],
+            "explanation": "B uses a fake handle and a claim NASA never made; C is impossible - nobody photographed the 2024 eclipse from the Moon. A is NASA's real account.",
+            "source": "NASA"
+        },
+        {
+            "id": "q_013",
+            "level": 4,
+            "difficulty": "medium",
+            "mode": 1,
+            "images": [
+                {
+                    "id": "img1",
+                    "src": "data/assets/set2_q4.jpg"
+                }
+            ],
+            "answer": "fake",
+            "explanation": "The rubble is from the 2020 Izmir earthquake, not the 2023 Kahramanmaras quake. Old disaster photos are recycled after every crisis - reverse-image search the frame.",
+            "source": "AP Fact Check"
+        },
+        {
+            "id": "q_014",
+            "level": 5,
+            "difficulty": "medium",
+            "mode": 2,
+            "images": [
+                {
+                    "id": "a",
+                    "src": "data/assets/set2_q5_a.jpg"
+                },
+                {
+                    "id": "b",
+                    "src": "data/assets/set2_q5_b.jpg"
+                }
+            ],
+            "answer": "a",
+            "explanation": "A deletes the words no evidence that from the same quote. Removing a negation is one of the simplest and most effective edits - always find the full quote in context.",
+            "source": "Reuters Fact Check"
+        },
+        {
+            "id": "q_015",
+            "level": 6,
+            "difficulty": "medium",
+            "mode": 3,
+            "images": [
+                {
+                    "id": "a",
+                    "src": "data/assets/set2_q6_a.jpg"
+                },
+                {
+                    "id": "b",
+                    "src": "data/assets/set2_q6_b.jpg"
+                }
+            ],
+            "answer": "all_real",
+            "explanation": "Both items match the CDC's published guidance and carry the agency's real account. Not everything in your feed is fake - checking should confirm good information too.",
+            "source": "CDC"
+        },
+        {
+            "id": "q_016",
+            "level": 7,
+            "difficulty": "hard",
+            "mode": 4,
+            "images": [
+                {
+                    "id": "a",
+                    "src": "data/assets/set2_q7_a.jpg"
+                },
+                {
+                    "id": "b",
+                    "src": "data/assets/set2_q7_b.jpg"
+                },
+                {
+                    "id": "c",
+                    "src": "data/assets/set2_q7_c.jpg"
+                }
+            ],
+            "answer": [
+                "a",
+                "c"
+            ],
+            "explanation": "The Ghost of Kyiv was a wartime legend, not a confirmed pilot; Ukraine's air force said so. C carries a DCS WORLD watermark, marking it as flight-simulator footage, not combat video. B is the official correction.",
+            "source": "AP Fact Check"
+        },
+        {
+            "id": "q_017",
+            "level": 8,
+            "difficulty": "hard",
+            "mode": 1,
+            "images": [
+                {
+                    "id": "img1",
+                    "src": "data/assets/set2_q8.jpg"
+                }
+            ],
+            "answer": "fake",
+            "explanation": "In May 2023 a fake image of an explosion near the Pentagon went viral and briefly moved US stock markets. This version has no source or credit; check official emergency channels before sharing.",
+            "source": "AP Fact Check"
+        },
+        {
+            "id": "q_018",
+            "level": 9,
+            "difficulty": "hard",
+            "mode": 2,
+            "images": [
+                {
+                    "id": "a",
+                    "src": "data/assets/set2_q9_a.jpg"
+                },
+                {
+                    "id": "b",
+                    "src": "data/assets/set2_q9_b.jpg"
+                }
+            ],
+            "answer": "a",
+            "explanation": "A misspells the agency name (Defence) and carries no provenance. Leaked documents need a verifiable source, not just a convincing look.",
+            "source": "Poynter / IFCN"
+        }
+    ]
+}
