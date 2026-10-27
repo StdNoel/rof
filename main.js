@@ -9,6 +9,9 @@ const QUESTION_SETS = [1, 2, 3, 4];
 
 const MAX_HEARTS = 3;
 const MAX_LEVEL = 9;
+const MAX_SCORE = 100;
+const SCORE_ACCURACY_WEIGHT = 0.8;
+const SCORE_SPEED_WEIGHT = 0.2;
 const NOTE_LEVELS = [6, 7, 8, 9, 10, 11, 12, 13];
 
 const state = {
@@ -34,6 +37,7 @@ const state = {
     timerId: null,
     timerStart: 0,
     timerDurationMs: 0,
+    timerStartRemainingMs: 0,
     timerPaused: false,
     timerRemainingMs: 0,
     warnTimeoutId: null,
@@ -106,7 +110,12 @@ function showScreen(name) {
     document.getElementById("screen-" + name).classList.add("active");
 
     if (name === "facts") renderFacts();
-    if (name !== "game") pauseTimer();
+
+    if (name === "game") {
+        if (state.sessionActive) resumeTimer();
+    } else {
+        pauseTimer();
+    }
 }
 
 document.querySelectorAll("[data-goto]").forEach(btn => {
@@ -203,7 +212,8 @@ function endSession() {
     state.answered = false;
     state.sessionActive = false;
 
-    document.getElementById("game-complete-score").textContent = state.score;
+    const finalScore = Math.round(Math.min(MAX_SCORE, state.score));
+    document.getElementById("game-complete-score").textContent = `${finalScore} / ${MAX_SCORE}`;
     document.getElementById("game-complete").classList.remove("hidden");
     clearTimer();
     setTimerReadoutText("--");
@@ -261,7 +271,10 @@ function questionHasVideo(q) {
 
 function updateScoreDisplay() {
     const el = document.getElementById("game-score");
-    if (el) el.textContent = "Score: " + state.score;
+    if (el) {
+        const score = Math.round(Math.min(MAX_SCORE, state.score));
+        el.textContent = `Score: ${score} / ${MAX_SCORE}`;
+    }
 }
 
 // ============================================================
@@ -288,6 +301,21 @@ function timerDurationForQuestion(q) {
     return (q.images.length <= 2 ? 10 : 15) * 1000;
 }
 
+function getAnswerRemainingMs() {
+    if (state.timerPaused) return state.timerRemainingMs;
+    if (!state.timerId) return null;
+    const elapsed = performance.now() - state.timerStart;
+    return Math.max(0, state.timerStartRemainingMs - elapsed);
+}
+
+function scoreForCorrectAnswer(remainingMs) {
+    const timeFraction = remainingMs !== null && state.timerDurationMs > 0
+        ? Math.max(0, Math.min(1, remainingMs / state.timerDurationMs))
+        : 0;
+    return (MAX_SCORE / MAX_LEVEL) *
+        (SCORE_ACCURACY_WEIGHT + SCORE_SPEED_WEIGHT * timeFraction);
+}
+
 function setTimerReadoutText(text) {
     const el = document.getElementById("timer-seconds");
     if (el) el.textContent = text;
@@ -301,39 +329,44 @@ function updateTimerReadout() {
 function tickTimerReadout() {
     if (state.timerPaused || state.answered) return;
     const elapsed = performance.now() - state.timerStart;
-    state.timerRemainingMs = Math.max(0, state.timerDurationMs - elapsed);
+    state.timerRemainingMs = Math.max(0, state.timerStartRemainingMs - elapsed);
     updateTimerReadout();
 }
 
-function startTimer(durationMs) {
+function startTimer(durationMs, remainingMs = durationMs) {
     clearTimer();
+
+    const startFraction = durationMs > 0
+        ? Math.max(0, Math.min(1, remainingMs / durationMs))
+        : 0;
 
     const bar = document.getElementById("timer-bar");
     bar.classList.remove("warn");
     bar.style.transition = "none";
-    bar.style.width = "100%";
+    bar.style.width = `${startFraction * 100}%`;
     void bar.offsetWidth;
 
     state.timerDurationMs = durationMs;
+    state.timerStartRemainingMs = remainingMs;
     state.timerStart = performance.now();
     state.timerPaused = false;
-    state.timerRemainingMs = durationMs;
+    state.timerRemainingMs = remainingMs;
     updateTimerReadout();
     state.timerTickerId = setInterval(tickTimerReadout, 200);
 
-    bar.style.transition = `width ${durationMs}ms linear, background 0.3s, box-shadow 0.3s`;
+    bar.style.transition = `width ${remainingMs}ms linear, background 0.3s, box-shadow 0.3s`;
     requestAnimationFrame(() => {
         bar.style.width = "0%";
     });
 
-    const warnDelay = Math.max(0, durationMs - 3000);
+    const warnDelay = Math.max(0, remainingMs - 3000);
     state.warnTimeoutId = setTimeout(() => {
         if (!state.answered) bar.classList.add("warn");
     }, warnDelay);
 
     state.timerId = setTimeout(() => {
         if (!state.answered) onTimeout();
-    }, durationMs);
+    }, remainingMs);
 }
 
 function clearTimer() {
@@ -356,7 +389,7 @@ function pauseTimer() {
     bar.style.width = computed;
 
     const elapsed = performance.now() - state.timerStart;
-    state.timerRemainingMs = Math.max(0, state.timerDurationMs - elapsed);
+    state.timerRemainingMs = Math.max(0, state.timerStartRemainingMs - elapsed);
     updateTimerReadout();
 }
 
@@ -364,7 +397,7 @@ function resumeTimer() {
     if (!state.timerPaused || state.answered) return;
     state.timerPaused = false;
     if (state.timerRemainingMs > 0) {
-        startTimer(state.timerRemainingMs);
+        startTimer(state.timerDurationMs, state.timerRemainingMs);
     }
 }
 
@@ -534,6 +567,8 @@ function renderMultiSelectChoices(q, container) {
 async function handleAnswer(value) {
     if (state.answered) return;
     state.answered = true;
+
+    const remainingMs = getAnswerRemainingMs();
     clearTimer();
 
     const q = state.currentQuestion;
@@ -541,7 +576,7 @@ async function handleAnswer(value) {
     const fb = document.getElementById("feedback");
 
     if (correct) {
-        state.score += 10;
+        state.score = Math.min(MAX_SCORE, state.score + scoreForCorrectAnswer(remainingMs));
         fb.className = "feedback good";
         fb.innerHTML = `<h3>Correct ✓</h3><p>${q.explanation}</p>`;
     } else {
