@@ -1,5 +1,7 @@
 # Real or Fake
 
+**Play online:** https://stdnoel.github.io/rof/
+
 A browser-based quiz game that challenges players to spot misinformation,
 misleading edits, and out-of-context media — and to practise the habits of
 fact-checking. Built with vanilla HTML, CSS, and JavaScript, and intended
