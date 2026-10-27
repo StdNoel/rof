@@ -8,7 +8,7 @@ const LAST_QUESTION_KEY = "real-or-fake-last-q";
 const QUESTION_SETS = [1, 2, 3, 4];
 
 const MAX_HEARTS = 3;
-const MAX_LEVEL = 15;
+const MAX_LEVEL = 9;
 const NOTE_LEVELS = [6, 7, 8, 9, 10, 11, 12, 13];
 
 const state = {
@@ -37,6 +37,7 @@ const state = {
     timerPaused: false,
     timerRemainingMs: 0,
     warnTimeoutId: null,
+    timerTickerId: null,
 };
 
 // ============================================================
@@ -117,9 +118,13 @@ document.querySelectorAll("[data-goto]").forEach(btn => {
             // Start a fresh session only from the menu, not when re-entering
             // the game screen from Facts/Credits mid-run.
             const goingToMenu = !state.sessionActive;
+            // Show the screen first so the timer bar is rendered before the
+            // timer starts; otherwise the CSS width transition never runs.
+            showScreen(target);
             if (goingToMenu) {
                 startSession();
             }
+            return;
         }
 
         showScreen(target);
@@ -201,6 +206,7 @@ function endSession() {
     document.getElementById("game-complete-score").textContent = state.score;
     document.getElementById("game-complete").classList.remove("hidden");
     clearTimer();
+    setTimerReadoutText("--");
 
     // Focus the overlay for keyboard users
     const overlay = document.getElementById("game-complete");
@@ -282,6 +288,23 @@ function timerDurationForQuestion(q) {
     return (q.images.length <= 2 ? 10 : 15) * 1000;
 }
 
+function setTimerReadoutText(text) {
+    const el = document.getElementById("timer-seconds");
+    if (el) el.textContent = text;
+}
+
+function updateTimerReadout() {
+    const seconds = Math.ceil(Math.max(0, state.timerRemainingMs) / 1000);
+    setTimerReadoutText(seconds + "s");
+}
+
+function tickTimerReadout() {
+    if (state.timerPaused || state.answered) return;
+    const elapsed = performance.now() - state.timerStart;
+    state.timerRemainingMs = Math.max(0, state.timerDurationMs - elapsed);
+    updateTimerReadout();
+}
+
 function startTimer(durationMs) {
     clearTimer();
 
@@ -295,6 +318,8 @@ function startTimer(durationMs) {
     state.timerStart = performance.now();
     state.timerPaused = false;
     state.timerRemainingMs = durationMs;
+    updateTimerReadout();
+    state.timerTickerId = setInterval(tickTimerReadout, 200);
 
     bar.style.transition = `width ${durationMs}ms linear, background 0.3s, box-shadow 0.3s`;
     requestAnimationFrame(() => {
@@ -314,6 +339,7 @@ function startTimer(durationMs) {
 function clearTimer() {
     if (state.timerId) { clearTimeout(state.timerId); state.timerId = null; }
     if (state.warnTimeoutId) { clearTimeout(state.warnTimeoutId); state.warnTimeoutId = null; }
+    if (state.timerTickerId) { clearInterval(state.timerTickerId); state.timerTickerId = null; }
 }
 
 function pauseTimer() {
@@ -322,6 +348,7 @@ function pauseTimer() {
     clearTimeout(state.timerId);
     state.timerId = null;
     if (state.warnTimeoutId) { clearTimeout(state.warnTimeoutId); state.warnTimeoutId = null; }
+    if (state.timerTickerId) { clearInterval(state.timerTickerId); state.timerTickerId = null; }
 
     const bar = document.getElementById("timer-bar");
     const computed = getComputedStyle(bar).width;
@@ -330,6 +357,7 @@ function pauseTimer() {
 
     const elapsed = performance.now() - state.timerStart;
     state.timerRemainingMs = Math.max(0, state.timerDurationMs - elapsed);
+    updateTimerReadout();
 }
 
 function resumeTimer() {
@@ -356,6 +384,7 @@ function startLevel() {
         document.getElementById("feedback").classList.add("hidden");
         document.getElementById("btn-next").classList.add("hidden");
         document.getElementById("timer-bar").style.width = "100%";
+        setTimerReadoutText("--");
         return;
     }
 
@@ -382,6 +411,8 @@ function startLevel() {
         bar.style.transition = "none";
         bar.style.width = "100%";
         bar.classList.remove("warn");
+        state.timerRemainingMs = 0;
+        setTimerReadoutText("--");
     } else {
         startTimer(timerDurationForQuestion(state.currentQuestion));
     }
@@ -539,6 +570,8 @@ async function onTimeout() {
     if (state.answered) return;
     state.answered = true;
     clearTimer();
+    state.timerRemainingMs = 0;
+    updateTimerReadout();
 
     const q = state.currentQuestion;
     const fb = document.getElementById("feedback");
@@ -754,6 +787,7 @@ function advanceAfterInterlude() {
         document.getElementById("choices").innerHTML = "";
         document.getElementById("feedback").classList.add("hidden");
         document.getElementById("btn-next").classList.add("hidden");
+        setTimerReadoutText("--");
         showScreen("menu");
         return;
     }

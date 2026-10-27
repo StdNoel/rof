@@ -197,10 +197,6 @@ body::after {
         animation: none;
         opacity: 0;
     }
-
-    .timer-bar {
-        transition: none !important;
-    }
 }
 
 .screen {
@@ -364,6 +360,14 @@ body::after {
     color: var(--panel-2);
     text-shadow: none;
     opacity: 0.5;
+}
+
+.timer-seconds {
+    min-width: 3ch;
+    text-align: right;
+    font-size: 0.9rem;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
 }
 
 .timer-track {

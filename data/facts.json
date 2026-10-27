@@ -58,44 +58,9 @@
             "body": "Some of the most effective fake photos are simply the real thing flipped horizontally. A face on the left becomes a face on the right, a sign becomes unreadable, and reverse-image searches struggle to match. Look for reversed text or asymmetrical landmarks as a clue."
         },
         {
-            "id": "fact_headlines",
-            "type": "fact",
-            "unlockedAtLevel": 9,
-            "title": "Headlines don't have to match the article",
-            "body": "A headline is written to get the click, not to summarise. Read past it. It's common for a headline to make a claim the article itself softens or contradicts in the second paragraph. Sharing the headline without reading the piece is one of the most common ways misinformation spreads."
-        },
-        {
-            "id": "fact_screenshots",
-            "type": "fact",
-            "unlockedAtLevel": 10,
-            "title": "Screenshots are the easiest thing to fake",
-            "body": "A screenshot of a tweet, a text, or a headline can be made in ten seconds with browser developer tools or a template. Never trust a screenshot as evidence. Search for the original post. If it doesn't exist, it probably never did."
-        },
-        {
-            "id": "fact_forwarded",
-            "type": "fact",
-            "unlockedAtLevel": 11,
-            "title": "The 'forwarded' label",
-            "body": "WhatsApp and other messaging apps mark messages that have been forwarded many times. That label is a warning sign, not a badge of authenticity. If five people already forwarded it to you before you read it, ask why. Chain messages are the oldest misinformation format there is."
-        },
-        {
-            "id": "fact_misinfo_vs_disinfo",
-            "type": "fact",
-            "unlockedAtLevel": 12,
-            "title": "Misinformation vs. disinformation",
-            "body": "Misinformation is false information shared without intent to harm — someone believed it and passed it on. Disinformation is false information shared on purpose to deceive. Both cause the same damage. The trick is that most of what you'll encounter is misinformation, spread by people who honestly think they're helping."
-        },
-        {
-            "id": "fact_astroturfing",
-            "type": "fact",
-            "unlockedAtLevel": 13,
-            "title": "Fake grassroots movements",
-            "body": "Sometimes a hashtag or campaign looks like it's coming from thousands of ordinary people, but it's actually coordinated by a small group using many accounts. Look for identical phrasing across many posts, accounts created on the same day, or engagement that spikes and dies in minutes. Real movements build slowly."
-        },
-        {
             "id": "fact_the_habit",
             "type": "fact",
-            "unlockedAtLevel": 14,
+            "unlockedAtLevel": 9,
             "title": "The habit is the point",
             "body": "You will not catch every piece of misinformation. No one does. The goal is not to be immune — it's to build the habit of pausing, checking, and being willing to change your mind when the evidence says so. That willingness is the whole skill. That's what fact-checking actually is."
         }
