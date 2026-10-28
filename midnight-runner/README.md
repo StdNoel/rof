@@ -2,7 +2,7 @@
 
 A minimalist endless maze-runner inspired by NIKKE's *Midnight Phantom Runner* and *Pac-Man 256*. Vanilla HTML, CSS, and Canvas 2D. No build step, libraries, or external assets.
 
-Access it at `/midnight-runner/` after serving the repository root, or open it from the `Minigame` button in the main menu. Use the `← Real or Fake` link at the top-left of the lobby to return to the main menu.
+Access it at `/midnight-runner/` after serving the repository root, or open it from the `Minigame` button in the main menu, which leads to the minigames page. Use the `← Minigames` link at the top-left of the lobby to return to that page.
 
 ```bash
 python -m http.server 8000

@@ -12,8 +12,8 @@ release.
 
 ## How the Game Works
 
-1. **Menu** — Start the game, browse unlocked facts, view credits, play the
-   Midnight Runner minigame, or reset progress.
+1. **Menu** — Start the game, browse unlocked facts, view credits, open the
+   minigames page, or reset progress.
 2. **A run** lasts **15 levels**. Level 1 starts when you click Start Game;
    level 15 ends with a Game Complete card.
 3. **Each level** presents a *question*: one or more media items (images
@@ -358,6 +358,12 @@ rof/
 ├── main.js
 ├── style.css
 ├── README.md
+├── minigames/                # minigame hub page
+│   └── index.html
+├── midnight-runner/          # Midnight Runner minigame
+│   ├── index.html
+│   ├── runner.css
+│   └── runner.js
 └── data/
     ├── facts.json
     ├── secrets.json

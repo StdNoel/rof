@@ -181,7 +181,7 @@ document.querySelectorAll("[data-goto]").forEach(btn => {
         const target = btn.dataset.goto;
 
         if (target === "minigame") {
-            window.location.href = "midnight-runner/";
+            window.location.href = "minigames/";
             return;
         }
 
