@@ -5,7 +5,7 @@ A minimalist endless maze-runner inspired by NIKKE's *Midnight Phantom Runner* /
 ## 1. Scope & Placement
 
 - Standalone static game in `midnight-runner/`, served at `/midnight-runner/`.
-- Existing Real or Fake files remain untouched.
+- Existing Real or Fake files remain unchanged except for a menu link to the minigame.
 - Vanilla HTML, CSS, and JavaScript with Canvas 2D.
 - No build step, libraries, or external assets.
 - All characters are chromatic filled circles. No black/white entities.
@@ -35,6 +35,7 @@ midnight-runner/
   - **Sol** — amber — boost magnetizes nearby pickups.
 - Each character card shows color, name, boost description, and personal best.
 - Start button.
+- Reset progress button below Start; it clears personal bests only.
 - Settings gear in the top-right corner.
 
 ### Game
@@ -223,6 +224,7 @@ Because this is a standalone page, there is no conflict with Real or Fake's `Tab
 - On touch devices, selecting Manual shows a large circular Boost button.
 - Stored in `localStorage` under `mr-settings-v1`.
 - Best scores stored under `mr-best-v1`, one entry per character.
+- Reset Progress in the lobby clears all three best scores; settings and the last character are preserved.
 - No server, accounts, or online leaderboard.
 
 Suggested settings shape:
@@ -314,7 +316,7 @@ Suggested best-score shape:
 - Manual boost key: `E`.
 - Character names: Vela / Rho / Sol.
 - No audio in v1.
-- No link added to the root Real or Fake menu; the game is accessed at `/midnight-runner/`.
+- A `Minigame` button in the root Real or Fake menu opens `/midnight-runner/`; the game itself remains standalone.
 - Boost immunity excludes the collapse zone.
 
 

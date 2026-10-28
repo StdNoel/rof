@@ -123,6 +123,11 @@ document.querySelectorAll("[data-goto]").forEach(btn => {
         if (state.jumpscareInProgress) return;
         const target = btn.dataset.goto;
 
+        if (target === "minigame") {
+            window.location.href = "midnight-runner/";
+            return;
+        }
+
         if (target === "game") {
             // Start a fresh session only from the menu, not when re-entering
             // the game screen from Facts/Credits mid-run.
