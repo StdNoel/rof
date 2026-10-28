@@ -205,6 +205,32 @@ kbd {
     gap: clamp(16px, 3vh, 28px);
 }
 
+.lobby-title {
+    margin: 0;
+    font-size: clamp(2rem, 6vw, 3.6rem);
+    line-height: 1.02;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: var(--text);
+    text-shadow:
+        0 0 18px rgba(90, 120, 255, 0.45),
+        0 0 42px rgba(46, 230, 255, 0.18);
+}
+
+.lobby-title span {
+    color: var(--accent);
+    text-shadow:
+        0 0 10px rgba(46, 230, 255, 0.55),
+        0 0 34px rgba(46, 230, 255, 0.25);
+}
+
+.lobby-title span.lobby-title-highlight {
+    color: var(--danger);
+    text-shadow:
+        0 0 10px rgba(255, 69, 207, 0.55),
+        0 0 34px rgba(255, 69, 207, 0.25);
+}
+
 .tagline {
     margin: 0;
     max-width: 34ch;
