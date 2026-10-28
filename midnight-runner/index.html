@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#06061a" />
+    <title>Midnight Runner</title>
+    <link rel="stylesheet" href="runner.css" />
+</head>
+
+<body>
+    <div id="app">
+
+        <!-- ===== LOBBY ===== -->
+        <section id="screen-lobby" class="screen active">
+            <header class="topbar">
+                <a class="back-link" href="../" aria-label="Back to Real or Fake">
+                    <span aria-hidden="true">&larr;</span>
+                    <span class="back-label">Real or Fake</span>
+                </a>
+                <div class="brand">
+                    <span class="brand-main">MIDNIGHT</span>
+                    <span class="brand-sub">RUNNER</span>
+                </div>
+                <button id="lobby-settings" class="gear" type="button" aria-label="Open settings">
+                    <span aria-hidden="true">&#9881;</span>
+                </button>
+            </header>
+
+            <div class="lobby-main">
+                <p class="tagline">Outrun the collapse. Pick a phantom.</p>
+
+                <div class="best-line">
+                    <span class="best-label">Best run</span>
+                    <strong id="lobby-best">0</strong>
+                </div>
+
+                <div class="characters" role="radiogroup" aria-label="Choose a runner">
+                    <button class="character" type="button" data-character="vela" role="radio" aria-checked="true">
+                        <span class="orb" aria-hidden="true"><span class="orb-core"></span></span>
+                        <span class="char-name">Vela</span>
+                        <span class="char-desc">Longer boost &middot; +8% speed</span>
+                        <span class="char-best">Best <b data-best="vela">0</b></span>
+                    </button>
+                    <button class="character" type="button" data-character="rho" role="radio" aria-checked="false">
+                        <span class="orb" aria-hidden="true"><span class="orb-core"></span></span>
+                        <span class="char-name">Rho</span>
+                        <span class="char-desc">Shockwave clears nearby foes</span>
+                        <span class="char-best">Best <b data-best="rho">0</b></span>
+                    </button>
+                    <button class="character" type="button" data-character="sol" role="radio" aria-checked="false">
+                        <span class="orb" aria-hidden="true"><span class="orb-core"></span></span>
+                        <span class="char-name">Sol</span>
+                        <span class="char-desc">Boost magnetizes pickups</span>
+                        <span class="char-best">Best <b data-best="sol">0</b></span>
+                    </button>
+                </div>
+
+                <div class="lobby-actions">
+                    <button id="start-btn" class="primary" type="button">
+                        Start Run <span class="key-hint">Enter</span>
+                    </button>
+                    <button id="reset-progress" class="ghost reset-progress" type="button">
+                        Reset Progress
+                    </button>
+                </div>
+
+                <p class="controls-hint">
+                    <kbd>WASD</kbd> / <kbd>Arrows</kbd> steer &middot; <kbd>E</kbd> boost &middot; <kbd>Esc</kbd> pause
+                </p>
+            </div>
+        </section>
+
+        <!-- ===== GAME ===== -->
+        <section id="screen-game" class="screen">
+            <header class="hud">
+                <div class="hud-group hud-left">
+                    <div id="hp-pips" class="hp-pips" aria-label="Health"></div>
+                </div>
+                <div class="hud-stat">
+                    <span id="hud-score" class="hud-value">0</span>
+                    <span class="hud-label">Score</span>
+                </div>
+                <div class="hud-stat">
+                    <span id="hud-distance" class="hud-value">0 m</span>
+                    <span class="hud-label">Distance</span>
+                </div>
+                <button id="game-settings" class="gear small" type="button" aria-label="Open settings">
+                    <span aria-hidden="true">&#9881;</span>
+                </button>
+            </header>
+
+            <div class="boost-row">
+                <div id="boost-track" class="boost-track" aria-hidden="true">
+                    <div id="boost-fill" class="boost-fill"></div>
+                </div>
+                <span id="boost-label" class="boost-label">Boost</span>
+            </div>
+
+            <div id="canvas-wrap" class="canvas-wrap">
+                <canvas id="game" aria-label="Midnight Runner maze. Use arrow keys or WASD to steer."></canvas>
+                <div id="boost-tint" class="boost-tint" aria-hidden="true"></div>
+
+                <button id="touch-boost" class="touch-boost" type="button" aria-label="Activate boost">
+                    BOOST
+                </button>
+
+                <div id="pause-overlay" class="overlay hidden" role="dialog" aria-modal="true"
+                    aria-labelledby="pause-title">
+                    <div class="overlay-card">
+                        <p class="overlay-kicker">Run paused</p>
+                        <h2 id="pause-title">Catch your breath.</h2>
+                        <p class="overlay-sub">The maze is patient. The collapse is not.</p>
+                        <div class="overlay-actions">
+                            <button id="pause-resume" class="primary" type="button">Resume <span
+                                    class="key-hint">Esc</span></button>
+                            <button id="pause-settings" class="ghost" type="button">Settings</button>
+                            <button id="pause-quit" class="ghost" type="button">Quit to Lobby</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="gameover-overlay" class="overlay hidden" role="dialog" aria-modal="true"
+                    aria-labelledby="gameover-title">
+                    <div class="overlay-card">
+                        <p class="overlay-kicker">Signal lost</p>
+                        <h2 id="gameover-title">Run ended.</h2>
+                        <div class="result-grid">
+                            <div class="result">
+                                <span id="go-score" class="result-value">0</span>
+                                <span class="result-label">Score</span>
+                            </div>
+                            <div class="result">
+                                <span id="go-distance" class="result-value">0 m</span>
+                                <span class="result-label">Distance</span>
+                            </div>
+                            <div class="result">
+                                <span id="go-best" class="result-value">0</span>
+                                <span class="result-label">Best with <b id="go-character">Vela</b></span>
+                            </div>
+                        </div>
+                        <p id="go-note" class="overlay-sub accent-note hidden">New personal best.</p>
+                        <div class="overlay-actions">
+                            <button id="go-retry" class="primary" type="button">Retry <span
+                                    class="key-hint">Enter</span></button>
+                            <button id="go-lobby" class="ghost" type="button">Lobby</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ===== SETTINGS MODAL ===== -->
+        <div id="settings-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+            <div class="modal-card">
+                <h2 id="settings-title">Settings</h2>
+
+                <div class="setting-row">
+                    <div class="setting-text">
+                        <span class="setting-name">Boost mode</span>
+                        <span class="setting-hint">Auto fires at full gauge. Manual waits for you.</span>
+                    </div>
+                    <div class="segmented" role="radiogroup" aria-label="Boost mode">
+                        <button type="button" data-boost-mode="auto" role="radio" aria-checked="true">Auto</button>
+                        <button type="button" data-boost-mode="manual" role="radio" aria-checked="false">Manual</button>
+                    </div>
+                </div>
+
+                <div class="setting-row">
+                    <div class="setting-text">
+                        <span class="setting-name">Manual boost key</span>
+                        <span class="setting-hint">Click, then press a safe key.</span>
+                    </div>
+                    <button id="key-capture" class="key-btn" type="button">E</button>
+                </div>
+
+                <p id="key-warning" class="warning hidden" role="alert"></p>
+
+                <div class="setting-row">
+                    <div class="setting-text">
+                        <span class="setting-name">Reduced effects</span>
+                        <span class="setting-hint">Cuts particles, shake, and pulsing.</span>
+                    </div>
+                    <button id="reduced-toggle" class="toggle" type="button" aria-pressed="false">Off</button>
+                </div>
+
+                <button id="settings-close" class="primary" type="button">Done</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="runner.js"></script>
+</body>
+
+</html>
