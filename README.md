@@ -287,14 +287,18 @@ Every question lives in one of the `data/questions_<set>.json` files.
 
 ### Media grid layout
 
-| Count | Columns |
-|:-----:|:-------:|
-| 1 | 1 (centered) |
-| 2 | 2 |
-| 3 | 3 |
-| 4 | 2 (2×2) |
+| Count | Desktop columns | Phone columns (≤700px) | Short landscape (≤500px tall) |
+|:-----:|:---------------:|:----------------------:|:-----------------------------:|
+| 1 | 1 (centered) | 1 (centered) | 1 (centered) |
+| 2 | 2 | 2 | 2 |
+| 3 | 3 | 2 | 3 |
+| 4 | 2 (2×2) | 2 (2×2) | 4 |
 
-Below 700px viewport width everything collapses to one column.
+On phones, multi-image questions stay side-by-side so players can compare
+them without excessive scrolling. Only single-image questions use a
+full-width card. In short landscape viewports, multi-image questions use a
+single row and the cards scale down with viewport height, keeping the
+question and answer choices on screen together.
 
 ---
 
