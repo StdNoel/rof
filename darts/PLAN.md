@@ -68,6 +68,8 @@ match state machine, UI, and boot.
 
 ### Overlays
 
+- **House rules**: "First round's on the house" before round 1. Everyone takes
+  one free sip; it is not added to the drink meters.
 - **Pass device** (2-player): "Player 2, take the board" before each turn.
 - **Round result**: "Player 2 takes it, 87-64 - Player 1 drinks." Animated
   sip-pip fill and glug sound. On a tie: "Dead even. Both drink."
@@ -82,35 +84,50 @@ match state machine, UI, and boot.
 ### Match Flow
 
 1. Lobby settings choose mode and difficulty.
-2. Round 1 begins. The starting player alternates each round.
-3. A turn is three darts, thrown one at a time.
-4. After both players have thrown, round totals are compared.
-5. The lower score drinks 1. A tie means both drink 1.
-6. A player at 5 drinks blacks out and loses immediately.
-7. If both reach 5 drinks on the same tie round, the higher match total wins;
+2. A house-rules toast gives everyone one free sip. It does not count toward
+   the five-drink limit or affect accuracy.
+3. Round 1 begins. The starting player alternates each round.
+4. A turn is three darts, thrown one at a time.
+5. After both players have thrown, round totals are compared.
+6. The lower score drinks 1. A tie means both drink 1.
+7. A player at 5 drinks blacks out and loses immediately.
+8. If both reach 5 drinks on the same tie round, the higher match total wins;
    if still equal, the match is a draw.
-8. Otherwise the next round starts with the other player throwing first.
+9. Otherwise the next round starts with the other player throwing first.
 
 State phases:
 
 ```
-lobby -> turnStart -> aim -> flight -> turnEnd
+lobby -> toast -> turnStart -> aim -> timing -> flight -> turnEnd
       -> roundEnd -> drink -> nextRound | blackout
 ```
 
 ### Throwing
 
-- The active player clicks or taps anywhere on the board canvas.
-- The final landing point is the aim point plus drunken jitter.
+- The active player aims with the mouse, touch, or arrow keys.
+- The aim must be valid: a pointer over the board or a keyboard reticle. If
+  the cursor is away and no keyboard aim is set, the reticle is hidden and
+  throws are ignored.
+- Click, tap, `Space`, or `Enter` locks the aim.
+- Two sequential precision-timing bars then appear:
+  - The horizontal marker moves left-right; the next input stops it.
+  - The vertical marker moves up-down; the next input stops it.
+- Marker distance from centre becomes a landing offset of up to roughly
+  `0.13R` per axis.
+- The final landing point is the locked aim plus timing offsets plus drunken
+  jitter.
 - Tapping outside the scoring rings scores 0 (a miss).
 - A dart flight animates for roughly 260 ms, leaves a short trail, and lands
   with a thunk and a score popup.
 - Input is locked while a dart is in flight.
-- A desktop hover reticle previews the aim point.
-- Keyboard: arrow keys move the reticle; `Space` or `Enter` throws.
-- Touch: tap to throw; `touch-action: none` prevents scrolling and zooming.
+- A desktop hover reticle previews the aim point while aiming.
+- Keyboard: arrow keys move the reticle; `Space` or `Enter` locks aim and
+  stops each bar.
+- Touch: tap to aim/lock/stop; `touch-action: none` prevents scrolling and
+  zooming.
 - After three darts, the turn passes automatically.
-- The bot throws automatically after a short delay.
+- The bot simulates timing internally based on difficulty and drunk level,
+  then throws automatically after a short delay.
 - Darts stick visibly on the board until the start of the next round.
 
 ---
@@ -171,14 +188,14 @@ Each player has a drink level from 0 to 5. Level 5 ends the match.
 `R` is the board radius. Jitter is applied to the landing point at the moment
 of release.
 
-| Drinks | Label | Aim jitter | Board blur | Sway |
-|:---:|---|---|---|---|
-| 0 | Sober | 0.018R | none | none |
-| 1 | Tipsy | 0.028R | 0.6 px | 0.3 deg |
-| 2 | Buzzed | 0.045R | 1.4 px | 0.6 deg |
-| 3 | Wasted | 0.070R | 2.4 px | 1.0 deg |
-| 4 | Seeing Double | 0.100R | 3.5 px | 1.6 deg |
-| 5 | Blackout | match over | - | - |
+| Drinks | Label | Aim jitter | Board blur | Sway | Timing period |
+|:---:|---|---|---|---|---|
+| 0 | Sober | 0.018R | none | none | 1.15 s |
+| 1 | Tipsy | 0.028R | 1 px | 0.3 deg | 0.99 s |
+| 2 | Buzzed | 0.045R | 2 px | 0.6 deg | 0.85 s |
+| 3 | Wasted | 0.070R | 5 px | 1.0 deg | 0.73 s |
+| 4 | Seeing Double | 0.100R | 7 px | 1.6 deg | 0.63 s |
+| 5 | Blackout | match over | - | - | - |
 
 - Each drink adds a random "big slip" chance of 6% + 4% per drink, applying an
   extra 0.05R-0.12R offset. This keeps comebacks possible.
@@ -189,15 +206,21 @@ of release.
 ### Visual Rules
 
 - Drunk visuals apply to the board stage only.
+- Blur is a dedicated layer above the board, so the aim reticle stays sharp
+  and interactive.
+- Timing tracks sit on soft dark backing strips so they stay legible over the
+  board.
+- From drink 3 onward, board blur deepens, timing tracks blur slightly, and
+  offset board afterimages increase the double-vision effect.
 - They follow the active human shooter: if that player is drunk, the board
-  blurs, sways, and gains a double-vision ghost and warm vignette.
-- The bot's drunkenness affects only its accuracy; the human's view stays
-  clear on the bot's turn.
+  blurs, sways, and gains a warm vignette; timing markers move faster.
+- The bot's drunkenness affects its accuracy and hidden timing; the human's
+  view stays clear on the bot's turn.
 - In 2-player mode the blur follows whichever player is throwing.
 - The scoreboard and HUD are never blurred.
 - A persisted **Reduce effects** toggle plus `prefers-reduced-motion` removes
-  sway and pulsing and caps blur at 0.6 px, while keeping the accuracy
-  penalty unchanged.
+  sway, afterimages, and pulsing and caps blur at 1 px, while keeping the
+  accuracy and timing penalties unchanged.
 
 ---
 
@@ -210,8 +233,10 @@ of release.
 | Hard | Legend | 0.025R | mostly treble 20 |
 
 - The bot picks a target, shows a reticle drift toward it, then throws.
+- The bot simulates the two timing stops internally; the timing bars are not
+  shown during its turn.
 - The bot accumulates drinks and suffers the same accuracy multipliers, so
-  it can choke late.
+  it can choke late. Its hidden timing gets less accurate with drinks.
 - Bot throws resolve through the same scoring path as human throws.
 - Difficulty changes only the base sigma and target mix; match rules are
   identical.
@@ -269,8 +294,8 @@ gesture.
 ### Accessibility
 
 - Canvas has an accessible label describing the board and controls.
-- Arrow keys move the reticle; `Space`/`Enter` throws; `Esc` opens quit
-  confirm.
+- Arrow keys move the reticle; `Space`/`Enter` locks aim and stops each
+  timing bar; `Esc` opens quit confirm.
 - Live region announces the current turn, dart score, round result, drinks,
   and winner.
 - Darts differ by shape as well as color; sip pips are labelled.
@@ -316,8 +341,12 @@ gesture.
 - No console errors on load or during play.
 - Board mapping spot-checks: 20 at top, 18 clockwise-left, 25 outer bull,
   50 bullseye, doubles and triples score correctly.
+- Cursor away from the board hides the reticle and cannot throw.
+- Aim locks first; horizontal and vertical bars must each be stopped before
+  the dart flies.
 - All three difficulties play; the bot throws only on its turn and never
   while a dart is in flight.
+- Free starting sip does not change drink counters.
 - 2-player pass-and-play alternates turns and rounds correctly.
 - Round loser drinks; tie makes both drink; 5 drinks triggers blackout.
 - Simultaneous blackout applies the higher-total tie-break or draw.
