@@ -34,8 +34,9 @@
                     <p class="tagline">A neon-pub darts duel</p>
                     <h1 class="lobby-title">Take the shot.<br /><span>Hold your nerve.</span></h1>
                     <p class="lobby-sub">
-                        Every round you lose, you drink. Every drink blurs the board and
-                        softens your aim. Five drinks is a blackout.
+                        Every round you lose, you drink. Every drink blurs the board,
+                        quickens the timing bars, and softens your aim. Five counted
+                        drinks is a blackout.
                     </p>
                 </div>
 
@@ -96,7 +97,7 @@
                         <ol class="rules">
                             <li>
                                 <b>Throw three darts.</b>
-                                <span>Tap the board. Classic 20-sector scoring with doubles, triples, and bull.</span>
+                                <span>Aim, lock in, then stop both timing bars. Classic 20-sector scoring with doubles, triples, and bull.</span>
                             </li>
                             <li>
                                 <b>Compare round totals.</b>
@@ -114,8 +115,9 @@
                         </div>
 
                         <div class="controls-hint">
-                            <kbd>Mouse</kbd> tap to throw &middot; <kbd>Arrows</kbd> aim &middot;
-                            <kbd>Space</kbd> throw &middot; <kbd>Esc</kbd> quit
+                            <kbd>Mouse</kbd> / <kbd>Arrows</kbd> aim &middot;
+                            <kbd>Click</kbd> / <kbd>Space</kbd> lock aim and stop both bars &middot;
+                            <kbd>Esc</kbd> quit
                         </div>
 
                         <p class="disclaimer">
@@ -158,15 +160,28 @@
                 <div class="board-column">
                     <div class="board-stage drunk-0" id="board-stage">
                         <div class="board-frame" id="board-frame">
-                    <canvas id="board" tabindex="0"
-                        aria-label="Dartboard. Move the pointer or arrow keys to aim, then click or press Space to throw."></canvas>
+                            <canvas id="board" tabindex="0"
+                                aria-label="Dartboard. Move the pointer or arrow keys to aim, then click or press Space to lock the aim. Stop the horizontal and vertical timing bars to throw."></canvas>
+                            <div class="drunk-blur" aria-hidden="true"></div>
                             <div class="drunk-overlay" aria-hidden="true"></div>
+                            <canvas id="fx" aria-hidden="true"></canvas>
+                            <div class="timing-ui hidden" id="timing-ui" aria-hidden="true">
+                                <div class="timing-track timing-horizontal" id="timing-h">
+                                    <span class="timing-zone" aria-hidden="true"></span>
+                                    <span class="timing-marker" id="timing-h-marker" aria-hidden="true"></span>
+                                </div>
+                                <div class="timing-track timing-vertical" id="timing-v">
+                                    <span class="timing-zone" aria-hidden="true"></span>
+                                    <span class="timing-marker" id="timing-v-marker" aria-hidden="true"></span>
+                                </div>
+                                <p class="timing-caption" id="timing-caption">Stop the horizontal bar</p>
+                            </div>
                         </div>
                         <div class="turn-banner" id="turn-banner" hidden></div>
                     </div>
                     <div class="throw-bar">
                         <div class="darts-left" id="darts-left" aria-label="Darts left this turn"></div>
-                        <p class="status-line" id="status-line">Tap the board to throw.</p>
+                        <p class="status-line" id="status-line">Aim at the board, then click or press Space to lock in.</p>
                     </div>
                 </div>
 
@@ -184,6 +199,18 @@
             </main>
 
             <p id="live" class="sr-only" aria-live="polite"></p>
+
+            <div id="start-overlay" class="overlay hidden" role="dialog" aria-modal="true"
+                aria-labelledby="start-title">
+                <div class="overlay-card">
+                    <p class="overlay-kicker">House rules</p>
+                    <h2 id="start-title">First round's on the house.</h2>
+                    <p class="overlay-sub">Everyone takes one sip to start. This one doesn't count toward your drinks.</p>
+                    <button id="start-continue" class="primary" type="button">
+                        Start throwing <span class="key-hint">Enter</span>
+                    </button>
+                </div>
+            </div>
 
             <div id="pass-overlay" class="overlay hidden" role="dialog" aria-modal="true"
                 aria-labelledby="pass-title">

@@ -9,9 +9,13 @@
     const RECORDS_KEY = "lc-best-v1";
     const DRINK_LIMIT = 5;
     const DARTS_PER_TURN = 3;
-    const FLIGHT_MS = 260;
-    const TURN_PAUSE_MS = 520;
-    const BOT_PAUSE_MS = 640;
+const FLIGHT_MS = 260;
+const TURN_PAUSE_MS = 520;
+const BOT_PAUSE_MS = 640;
+const TIMING_BASE_PERIOD = 1150;
+const TIMING_MIN_PERIOD = 500;
+const TIMING_MAX_OFFSET = 0.13;
+const TIMING_STOP_MS = 260;
 
     const SECTORS = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
 
@@ -70,9 +74,25 @@
         return (degrees * Math.PI) / 180;
     }
 
-    function adjustSigma(sigma, drinks) {
-        return sigma * (DRUNK[drinks].sigma / DRUNK[0].sigma);
-    }
+function adjustSigma(sigma, drinks) {
+    return sigma * (DRUNK[drinks].sigma / DRUNK[0].sigma);
+}
+
+function timingPeriod(drinks) {
+    return Math.max(TIMING_MIN_PERIOD, TIMING_BASE_PERIOD * Math.pow(0.86, drinks));
+}
+
+function timingPosition(start, now, period) {
+    const phase = ((now - start) / period) % 1;
+    return phase < 0.5 ? phase * 2 : 2 - phase * 2;
+}
+
+function timingQuality(offset) {
+    const distance = Math.abs(offset);
+    if (distance <= 0.08) return "perfect";
+    if (distance <= 0.22) return "good";
+    return "off";
+}
 
     function makeRecord() {
         return { wins: 0, losses: 0, best: null };
@@ -187,8 +207,11 @@
         const ids = [
             "screen-lobby", "screen-match", "lobby-mute", "match-mute", "difficulty-field",
             "effects-toggle", "start-btn", "records-line", "reset-records",
-            "quit-btn", "hud-round", "hud-turn", "board", "board-stage", "board-frame",
+            "quit-btn", "hud-round", "hud-turn", "board", "fx", "board-stage", "board-frame",
             "turn-banner", "darts-left", "status-line", "live",
+            "timing-ui", "timing-h", "timing-v", "timing-h-marker", "timing-v-marker",
+            "timing-caption",
+            "start-overlay", "start-title", "start-sub", "start-continue",
             "pass-overlay", "pass-kicker", "pass-title", "pass-sub", "pass-continue",
             "round-overlay", "round-kicker", "round-title", "round-sub", "drink-row",
             "round-continue", "end-overlay", "end-kicker", "end-title", "end-sub",
@@ -214,6 +237,7 @@
         dom.endDarts = [byId("end-darts-0"), byId("end-darts-1")];
         dom.endTotals = [byId("end-total-0"), byId("end-total-1")];
         dom.ctx = dom.board.getContext("2d");
+        dom.fxCtx = dom.fx.getContext("2d");
     }
 
     function announce(text) {
@@ -498,6 +522,9 @@
         dom.board.width = Math.round(size * dpr);
         dom.board.height = Math.round(size * dpr);
         dom.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        dom.fx.width = Math.round(size * dpr);
+        dom.fx.height = Math.round(size * dpr);
+        dom.fxCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
         boardBuffer = document.createElement("canvas");
         boardBuffer.width = Math.round(size * dpr);
@@ -536,6 +563,13 @@
         if (roll < 0.7) return targetPoint(19, "triple");
         if (roll < 0.85) return targetPoint(0, "bull");
         return targetPoint(pick([20, 19, 18, 17, 16, 15, 14, 13]), "single");
+    }
+
+    function botTimingOffsets(player) {
+        const difficulty = state.match ? state.match.difficulty : state.difficulty;
+        const base = difficulty === "easy" ? 0.055 : difficulty === "hard" ? 0.018 : 0.035;
+        const sigma = base * (1 + player.drinks * 0.18);
+        return { x: gauss() * sigma, y: gauss() * sigma };
     }
 
     function eventPoint(event) {
@@ -645,11 +679,30 @@
         }
     }
 
-    function aimPoint() {
+    function currentAim() {
         if (input.keyboard) return input.keyboard;
         if (input.hover) return input.hover;
-        if (input.pointer) return input.pointer;
-        return { x: 0, y: 0 };
+        return null;
+    }
+
+    function effectsReduced() {
+        return state.settings.reducedEffects || reducedMotionQuery.matches;
+    }
+
+    function visualDrunkLevel() {
+        const match = state.match;
+        if (!match) return 0;
+        if (match.phase === "drink" && match.lastLosers) {
+            let level = 0;
+            for (const index of match.lastLosers) {
+                const player = match.players[index];
+                if (!player.isBot) level = Math.max(level, Math.min(4, player.drinks));
+            }
+            return level;
+        }
+        const active = match.players[match.active];
+        if (!active || active.isBot) return 0;
+        return Math.min(4, active.drinks);
     }
 
     function drawReticle(ctx, aim, drinks, time, color) {
@@ -666,8 +719,8 @@
         ctx.fillStyle = color || "#ffb347";
         ctx.lineWidth = Math.max(1.2, view.size * 0.0022);
 
-        if (drinks > 0) {
-            const ghost = drinks * view.size * 0.004;
+        if (drinks >= 3) {
+            const ghost = (drinks - 1) * view.size * 0.004;
             ctx.globalAlpha = 0.22;
             for (const offset of [-ghost, ghost]) {
                 ctx.beginPath();
@@ -692,6 +745,41 @@
         ctx.restore();
     }
 
+    function updateTimingVisual(now) {
+        const match = state.match;
+        const timing = match && match.timing;
+        if (!match || match.phase !== "timing" || !timing || !dom.timingUi) {
+            if (dom.timingUi) dom.timingUi.classList.add("hidden");
+            return;
+        }
+
+        dom.timingUi.classList.remove("hidden");
+        const player = match.players[match.active];
+        const period = timingPeriod(player.drinks);
+        const frameNow = state.paused ? state.pausedAt : now;
+
+        if (timing.stage === "horizontal") {
+            timing.horizontal.pos = timingPosition(timing.horizontal.start, frameNow, period);
+            timing.horizontal.marker = timing.horizontal.pos;
+            dom.timingH.classList.add("active");
+            dom.timingV.classList.remove("active");
+            dom.timingCaption.textContent = state.paused ? "Timing paused" : "Stop the horizontal bar";
+        } else if (timing.stage === "vertical") {
+            timing.vertical.pos = timingPosition(timing.vertical.start, frameNow, period * 0.86);
+            timing.vertical.marker = timing.vertical.pos;
+            dom.timingH.classList.remove("active");
+            dom.timingV.classList.add("active");
+            dom.timingCaption.textContent = state.paused ? "Timing paused" : "Stop the vertical bar";
+        } else {
+            dom.timingH.classList.remove("active");
+            dom.timingV.classList.remove("active");
+            dom.timingCaption.textContent = "Dart away!";
+        }
+
+        dom.timingH.style.setProperty("--timing-pos", String(timing.horizontal.marker));
+        dom.timingV.style.setProperty("--timing-pos", String(timing.vertical.marker));
+    }
+
     function drawFlight(ctx, now) {
         const progress = clamp((now - flight.start) / FLIGHT_MS, 0, 1);
         const ease = 1 - Math.pow(1 - progress, 3);
@@ -714,7 +802,25 @@
         if (dom.ctx && dom.board) {
             if (!boardBuffer || view.size === 0) resizeCanvas();
             if (view.size) {
+                const level = visualDrunkLevel();
+                const reduced = effectsReduced();
                 dom.ctx.clearRect(0, 0, view.size, view.size);
+
+                if (boardBuffer && level >= 3 && !reduced) {
+                    const spread = level >= 4 ? view.size * 0.012 : view.size * 0.008;
+                    const alpha = level >= 4 ? 0.2 : 0.13;
+                    const ghosts = [
+                        [-spread, 0],
+                        [spread, 0],
+                        [0, -spread * 0.65],
+                    ];
+                    for (const offset of ghosts) {
+                        dom.ctx.globalAlpha = alpha;
+                        dom.ctx.drawImage(boardBuffer, offset[0], offset[1], view.size, view.size);
+                    }
+                    dom.ctx.globalAlpha = 1;
+                }
+
                 if (boardBuffer) dom.ctx.drawImage(boardBuffer, 0, 0, view.size, view.size);
 
                 const match = state.match;
@@ -724,7 +830,11 @@
                             drawDart(dom.ctx, dart.x, dart.y, player.color, 0, player.index === 1);
                         }
                     }
+                }
 
+                dom.fxCtx.clearRect(0, 0, view.size, view.size);
+
+                if (match) {
                     if (flight) {
                         if (frameNow - flight.start >= FLIGHT_MS) {
                             if (!state.paused) {
@@ -732,24 +842,29 @@
                                 flight = null;
                                 resolveThrow(finished);
                             } else {
-                                drawFlight(dom.ctx, frameNow);
+                                drawFlight(dom.fxCtx, frameNow);
                             }
                         } else {
-                            drawFlight(dom.ctx, frameNow);
+                            drawFlight(dom.fxCtx, frameNow);
                         }
                     }
 
                     if (match.phase === "aim") {
                         const active = match.players[match.active];
                         if (active.isBot && botPlan) {
-                            drawReticle(dom.ctx, botPlan.aim, active.drinks, frameNow, COLORS.p2);
-                            drawReticle(dom.ctx, botPlan.aim, active.drinks, frameNow + 170, COLORS.p2);
+                            drawReticle(dom.fxCtx, botPlan.aim, active.drinks, frameNow, COLORS.p2);
+                            drawReticle(dom.fxCtx, botPlan.aim, active.drinks, frameNow + 170, COLORS.p2);
                         } else if (!active.isBot) {
-                            drawReticle(dom.ctx, aimPoint(), active.drinks, frameNow, active.color);
+                            const aim = currentAim();
+                            if (aim) drawReticle(dom.fxCtx, aim, active.drinks, frameNow, active.color);
                         }
+                    } else if (match.phase === "timing" && match.lockedAim) {
+                        const active = match.players[match.active];
+                        drawReticle(dom.fxCtx, match.lockedAim, active.drinks, frameNow, active.color);
                     }
 
-                    drawPopups(dom.ctx, dt);
+                    updateTimingVisual(frameNow);
+                    drawPopups(dom.fxCtx, dt);
                 }
             }
         }
@@ -772,7 +887,7 @@
     }
 
     function hideOverlays() {
-        for (const overlay of [dom.passOverlay, dom.roundOverlay, dom.endOverlay, dom.quitOverlay]) {
+        for (const overlay of [dom.startOverlay, dom.passOverlay, dom.roundOverlay, dom.endOverlay, dom.quitOverlay]) {
             overlay.classList.add("hidden");
         }
     }
@@ -829,6 +944,8 @@
             ],
             winner: null,
             blacked: [],
+            lockedAim: null,
+            timing: null,
         };
 
         flight = null;
@@ -847,8 +964,26 @@
         showScreen("match");
         requestAnimationFrame(() => {
             resizeCanvas();
-            startRound();
+            showStartToast();
         });
+    }
+
+    function showStartToast() {
+        const match = state.match;
+        if (!match) return;
+        match.phase = "toast";
+        updateHud();
+        dom.startOverlay.classList.remove("hidden");
+        dom.startContinue.focus();
+        sfx("click");
+    }
+
+    function dismissStartToast() {
+        const match = state.match;
+        if (!match || match.phase !== "toast") return;
+        dom.startOverlay.classList.add("hidden");
+        sfx("click");
+        startRound();
     }
 
     function startRound() {
@@ -860,10 +995,13 @@
         match.dartsLeft = DARTS_PER_TURN;
         match.phase = "turnStart";
         match.blacked = [];
+        match.lockedAim = null;
+        match.timing = null;
         flight = null;
         botPlan = null;
         popups.length = 0;
         input.keyboard = null;
+        if (dom.timingUi) dom.timingUi.classList.add("hidden");
 
         for (const player of match.players) {
             player.roundScore = 0;
@@ -881,7 +1019,11 @@
         const player = match.players[match.active];
         match.phase = "turnStart";
         match.dartsLeft = DARTS_PER_TURN;
+        match.lockedAim = null;
+        match.timing = null;
         botPlan = null;
+        input.keyboard = null;
+        if (dom.timingUi) dom.timingUi.classList.add("hidden");
         updateScoreboard();
         updateDrunkVisuals();
         updateHud();
@@ -916,8 +1058,8 @@
         dom.passTitle.textContent = player.name + ", take the board.";
         dom.passSub.textContent = player.drinks > 0
             ? "You have " + player.drinks + " drink" + (player.drinks === 1 ? "" : "s") +
-              " in you. The board is blurry. Throw three darts."
-            : "The board is clear. Throw three darts.";
+              " in you. The board is blurry. Aim, lock in, then stop both bars."
+            : "The board is clear. Aim, lock in, then stop both bars.";
         dom.passOverlay.classList.remove("hidden");
         updateHud();
         dom.passContinue.focus();
@@ -942,13 +1084,78 @@
         updateHud();
     }
 
-    function throwHuman(aim) {
+    function lockHumanAim(aim) {
         const match = state.match;
-        if (!match || match.phase !== "aim" || flight) return;
+        if (!match || match.phase !== "aim" || flight || !aim) return;
         const player = match.players[match.active];
         if (player.isBot) return;
         ensureAudio();
-        beginThrow(aim, player);
+        const locked = { x: clamp(aim.x, -1.1, 1.1), y: clamp(aim.y, -1.1, 1.1) };
+        match.lockedAim = locked;
+        match.phase = "timing";
+        match.timing = {
+            stage: "horizontal",
+            finalAim: null,
+            horizontal: { start: performance.now(), pos: 0.5, marker: 0.5, offset: null },
+            vertical: { start: 0, pos: 0.5, marker: 0.5, offset: null },
+        };
+        for (const track of [dom.timingH, dom.timingV]) {
+            track.classList.remove("perfect", "good", "off");
+        }
+        sfx("tick");
+        updateHud();
+        updateTimingVisual(performance.now());
+        announce("Aim locked. Stop the horizontal bar.");
+    }
+
+    function applyTimingFeedback(track, offset) {
+        track.classList.remove("perfect", "good", "off");
+        track.classList.add(timingQuality(offset));
+        sfx(timingQuality(offset) === "off" ? "sting" : "tick");
+    }
+
+    function stopTiming() {
+        const match = state.match;
+        if (!match || match.phase !== "timing" || !match.timing) return;
+        const timing = match.timing;
+        const player = match.players[match.active];
+        const now = performance.now();
+        const period = timingPeriod(player.drinks);
+
+        if (timing.stage === "horizontal") {
+            const pos = timingPosition(timing.horizontal.start, now, period);
+            const offset = (pos - 0.5) * 2;
+            timing.horizontal.marker = pos;
+            timing.horizontal.offset = offset;
+            applyTimingFeedback(dom.timingH, offset);
+            timing.stage = "vertical";
+            timing.vertical.start = now;
+            updateHud();
+            updateTimingVisual(now);
+            announce("Horizontal bar stopped. Stop the vertical bar.");
+            return;
+        }
+
+        if (timing.stage === "vertical") {
+            const pos = timingPosition(timing.vertical.start, now, period * 0.86);
+            const offset = (pos - 0.5) * 2;
+            timing.vertical.marker = pos;
+            timing.vertical.offset = offset;
+            applyTimingFeedback(dom.timingV, offset);
+            timing.stage = "done";
+            timing.finalAim = {
+                x: match.lockedAim.x + (timing.horizontal.offset || 0) * TIMING_MAX_OFFSET,
+                y: match.lockedAim.y + (timing.vertical.offset || 0) * TIMING_MAX_OFFSET,
+            };
+            const quality = timingQuality((timing.horizontal.offset + timing.vertical.offset) / 2);
+            announce("Vertical bar stopped. " + quality.toUpperCase() + " timing.");
+            updateHud();
+            updateTimingVisual(now);
+            later(() => {
+                if (!state.match || state.match !== match || match.phase !== "timing" || !timing.finalAim) return;
+                beginThrow(timing.finalAim, player);
+            }, TIMING_STOP_MS);
+        }
     }
 
     function scheduleBotThrow() {
@@ -958,7 +1165,11 @@
             if (!state.match || state.match !== match || match.phase !== "aim") return;
             const player = match.players[match.active];
             if (!player.isBot || !botPlan) return;
-            beginThrow(botPlan.aim, player);
+            const offsets = botTimingOffsets(player);
+            beginThrow({
+                x: botPlan.aim.x + offsets.x,
+                y: botPlan.aim.y + offsets.y,
+            }, player);
         }, 760);
     }
 
@@ -994,6 +1205,9 @@
 
         if (left > 0) {
             match.phase = "aim";
+            match.lockedAim = null;
+            match.timing = null;
+            if (dom.timingUi) dom.timingUi.classList.add("hidden");
             updateHud();
             if (player.isBot) {
                 botPlan = { aim: pickBotTarget(), targetAt: performance.now() };
@@ -1117,23 +1331,9 @@
 
     function updateDrunkVisuals() {
         const match = state.match;
-        let level = 0;
-        let botTurn = false;
-
-        if (match) {
-            if (match.phase === "drink" && match.lastLosers) {
-                for (const index of match.lastLosers) {
-                    const player = match.players[index];
-                    if (!player.isBot) level = Math.max(level, Math.min(4, player.drinks));
-                }
-            } else {
-                const active = match.players[match.active];
-                if (active) {
-                    botTurn = active.isBot;
-                    if (!active.isBot) level = Math.min(4, active.drinks);
-                }
-            }
-        }
+        const level = visualDrunkLevel();
+        const active = match ? match.players[match.active] : null;
+        const botTurn = Boolean(active && active.isBot && match.phase !== "drink");
 
         dom.boardStage.classList.remove("drunk-0", "drunk-1", "drunk-2", "drunk-3", "drunk-4");
         dom.boardStage.classList.add("drunk-" + level);
@@ -1159,7 +1359,7 @@
     function updateScoreboard() {
         const match = state.match;
         if (!match) return;
-        const turnPhases = ["turnStart", "pass", "aim", "flight"];
+        const turnPhases = ["turnStart", "pass", "aim", "timing", "flight"];
 
         for (let i = 0; i < 2; i += 1) {
             const player = match.players[i];
@@ -1189,6 +1389,10 @@
         let turnText = "";
         let status = "";
         switch (match.phase) {
+            case "toast":
+                turnText = "First round's on the house";
+                status = "Everyone takes one free sip. It doesn't count.";
+                break;
             case "turnStart":
                 turnText = player.isBot ? player.name + " is stepping up" : player.name + " to throw";
                 status = player.isBot ? player.name + " is stepping up..." : player.name + ", get ready.";
@@ -1201,8 +1405,18 @@
                 turnText = player.isBot ? player.name + " is aiming" : player.name + " to throw";
                 status = player.isBot
                     ? player.name + " is aiming..."
-                    : "Tap the board to throw. " + match.dartsLeft + " dart" + (match.dartsLeft === 1 ? "" : "s") + " left.";
+                    : "Aim, then click or press Space to lock in. " + match.dartsLeft + " dart" + (match.dartsLeft === 1 ? "" : "s") + " left.";
                 break;
+            case "timing": {
+                const stage = match.timing ? match.timing.stage : "horizontal";
+                turnText = "Precision timing";
+                status = stage === "horizontal"
+                    ? "Click or press Space to stop the horizontal bar."
+                    : stage === "vertical"
+                        ? "Click or press Space to stop the vertical bar."
+                        : "Dart away...";
+                break;
+            }
             case "flight":
                 turnText = "Dart in the air";
                 status = "Dart in the air...";
@@ -1343,6 +1557,7 @@
         state.match = null;
         state.paused = false;
         state.pendingResume = false;
+        if (dom.timingUi) dom.timingUi.classList.add("hidden");
         hideOverlays();
         showScreen("lobby");
         dom.startBtn.focus({ preventScroll: true });
@@ -1369,11 +1584,24 @@
             if (!botPlan) botPlan = { aim: pickBotTarget(), targetAt: performance.now() };
             scheduleBotThrow();
         }
+        if (match.phase === "timing" && match.timing && match.timing.stage === "done" && match.timing.finalAim) {
+            const timing = match.timing;
+            later(() => {
+                if (!state.match || state.match !== match || match.phase !== "timing" || !timing.finalAim) return;
+                beginThrow(timing.finalAim, player);
+            }, TIMING_STOP_MS);
+        }
     }
 
     function resumeFromOverlay() {
         if (!state.match) return;
-        if (flight) flight.start += performance.now() - state.pausedAt;
+        const pausedFor = performance.now() - state.pausedAt;
+        if (flight) flight.start += pausedFor;
+        const match = state.match;
+        if (match && match.timing) {
+            if (match.timing.stage === "horizontal") match.timing.horizontal.start += pausedFor;
+            if (match.timing.stage === "vertical") match.timing.vertical.start += pausedFor;
+        }
         state.paused = false;
         state.pendingResume = false;
         resumeTurn();
@@ -1453,6 +1681,8 @@
         dom.lobbyMute.addEventListener("click", toggleMute);
         dom.matchMute.addEventListener("click", toggleMute);
 
+        dom.startContinue.addEventListener("click", dismissStartToast);
+
         dom.passContinue.addEventListener("click", () => {
             const match = state.match;
             if (!match || match.phase !== "pass") return;
@@ -1512,6 +1742,7 @@
         dom.board.addEventListener("pointermove", (event) => {
             if (event.pointerType !== "mouse" || state.screen !== "match") return;
             input.hover = eventPoint(event);
+            input.keyboard = null;
             input.lastDevice = "pointer";
         });
 
@@ -1522,16 +1753,25 @@
         dom.board.addEventListener("pointerdown", (event) => {
             if (state.screen !== "match" || state.paused) return;
             const match = state.match;
-            if (!match || match.phase !== "aim") return;
+            if (!match) return;
             const player = match.players[match.active];
             if (player.isBot) return;
+
+            if (match.phase === "timing") {
+                event.preventDefault();
+                ensureAudio();
+                stopTiming();
+                return;
+            }
+
+            if (match.phase !== "aim") return;
             event.preventDefault();
             ensureAudio();
             const point = eventPoint(event);
             input.pointer = point;
             input.hover = point;
             input.keyboard = null;
-            throwHuman(point);
+            lockHumanAim(point);
         });
 
         dom.board.addEventListener("contextmenu", (event) => event.preventDefault());
@@ -1560,6 +1800,14 @@
                 if (key === "Escape" || ((key === "Enter" || key === " ") && !nativeActivation)) {
                     event.preventDefault();
                     cancelQuit();
+                }
+                return;
+            }
+
+            if (overlayVisible(dom.startOverlay)) {
+                if ((key === "Enter" || key === " ") && !nativeActivation) {
+                    event.preventDefault();
+                    dismissStartToast();
                 }
                 return;
             }
@@ -1598,15 +1846,24 @@
             }
 
             if (nativeActivation || state.paused) return;
-            if (match.phase !== "aim") return;
 
             const player = match.players[match.active];
             if (player.isBot) return;
 
-            const current = input.keyboard || input.hover || { x: 0, y: 0 };
+            if (match.phase === "timing") {
+                if (key === " " || key === "Enter") {
+                    event.preventDefault();
+                    stopTiming();
+                }
+                return;
+            }
+
+            if (match.phase !== "aim") return;
+
+            const current = currentAim();
             const step = 0.028;
-            let x = current.x;
-            let y = current.y;
+            let x = current ? current.x : 0;
+            let y = current ? current.y : 0;
             let handled = true;
 
             switch (key) {
@@ -1625,8 +1882,12 @@
                 case " ":
                 case "Enter":
                     event.preventDefault();
+                    if (!current) {
+                        announce("Aim at the board first. Move the pointer over it or use the arrow keys.");
+                        return;
+                    }
                     input.keyboard = { x: clamp(x, -1.1, 1.1), y: clamp(y, -1.1, 1.1) };
-                    throwHuman(input.keyboard);
+                    lockHumanAim(input.keyboard);
                     return;
                 default:
                     handled = false;
@@ -1648,7 +1909,7 @@
 
         document.addEventListener("visibilitychange", () => {
             if (document.hidden) {
-                const phases = ["turnStart", "aim", "flight", "turnEnd"];
+                const phases = ["turnStart", "aim", "timing", "flight", "turnEnd"];
                 if (state.match && !state.paused && phases.indexOf(state.match.phase) !== -1 &&
                     !overlayVisible(dom.quitOverlay) && !overlayVisible(dom.roundOverlay) &&
                     !overlayVisible(dom.endOverlay)) {
