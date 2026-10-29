@@ -116,6 +116,63 @@ function showScreen(name) {
     } else {
         pauseTimer();
     }
+
+    scrollToTop();
+}
+
+// ============================================================
+// Responsive scroll helpers
+// ============================================================
+function prefersReducedMotion() {
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function isMobileLayout() {
+    return window.matchMedia("(max-width: 700px)").matches;
+}
+
+function scrollToTop() {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+}
+
+// Freeze the page behind a modal while preserving its scroll offset.
+// On iOS, overflow:hidden alone doesn't stop the page from moving.
+let modalScrollY = 0;
+
+function lockBodyScroll() {
+    if (document.body.classList.contains("modal-open")) return;
+    modalScrollY = window.scrollY || document.documentElement.scrollTop || 0;
+    document.body.style.top = `-${modalScrollY}px`;
+    document.body.classList.add("modal-open");
+}
+
+function unlockBodyScroll() {
+    if (!document.body.classList.contains("modal-open")) return;
+    document.body.classList.remove("modal-open");
+    document.body.style.top = "";
+    window.scrollTo(0, modalScrollY);
+}
+
+// After answering, make sure the feedback and Next button are reachable.
+// Only scroll when they are off-screen so desktop play is unaffected.
+function revealNextAction() {
+    if (!isMobileLayout()) return;
+
+    const next = document.getElementById("btn-next");
+    if (next.classList.contains("hidden")) return;
+
+    const vv = window.visualViewport;
+    const viewTop = vv ? vv.offsetTop : 0;
+    const viewBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
+
+    const rect = next.getBoundingClientRect();
+    const fullyVisible = rect.top >= viewTop && rect.bottom <= viewBottom;
+    if (fullyVisible) return;
+
+    next.scrollIntoView({
+        block: "end",
+        behavior: prefersReducedMotion() ? "auto" : "smooth",
+    });
 }
 
 document.querySelectorAll("[data-goto]").forEach(btn => {
@@ -214,17 +271,21 @@ function endSession() {
 
     const finalScore = Math.round(Math.min(MAX_SCORE, state.score));
     document.getElementById("game-complete-score").textContent = `${finalScore} / ${MAX_SCORE}`;
-    document.getElementById("game-complete").classList.remove("hidden");
+    const overlay = document.getElementById("game-complete");
+    overlay.classList.remove("hidden");
     clearTimer();
     setTimerReadoutText("--");
 
-    // Focus the overlay for keyboard users
-    const overlay = document.getElementById("game-complete");
-    overlay.focus();
+    lockBodyScroll();
+    overlay.scrollTop = 0;
+
+    // Focus the overlay for keyboard users without nudging the page
+    overlay.focus({ preventScroll: true });
 }
 
 function hideGameComplete() {
     document.getElementById("game-complete").classList.add("hidden");
+    unlockBodyScroll();
 }
 
 document.getElementById("game-complete-return").addEventListener("click", () => {
@@ -298,7 +359,7 @@ function loseHeart() {
 // ============================================================
 function timerDurationForQuestion(q) {
     if (typeof q.timer === "number" && q.timer > 0) return q.timer * 1000;
-    return (q.images.length <= 2 ? 10 : 15) * 1000;
+    return (q.images.length <= 2 ? 10 : 20) * 1000;
 }
 
 function getAnswerRemainingMs() {
@@ -407,6 +468,7 @@ function resumeTimer() {
 function startLevel() {
     state.answered = false;
     clearTimer();
+    scrollToTop();
 
     if (state.questions.length === 0) {
         document.getElementById("game-level").textContent = "Level " + state.level;
@@ -599,6 +661,8 @@ async function handleAnswer(value) {
         state.jumpscareInProgress = false;
         document.getElementById("btn-next").textContent = "Continue →";
     }
+
+    revealNextAction();
 }
 
 async function onTimeout() {
@@ -634,6 +698,8 @@ async function onTimeout() {
         state.jumpscareInProgress = false;
         document.getElementById("btn-next").textContent = "Continue →";
     }
+
+    revealNextAction();
 }
 
 function freezeTimerBar() {
@@ -682,7 +748,7 @@ function revealAnswer(q) {
     const aiIds = aiImageIds(q);
     document.querySelectorAll(".card").forEach(card => {
         const id = card.dataset.imageId;
-        card.classList.add(aiIds.has(id) ? "is-fake" : "is-real");
+        card.classList.add(aiIds.has(id) ? "is-ai" : "is-real");
     });
 }
 
@@ -722,7 +788,7 @@ function showInterlude() {
 
     if (item.kind === "complete") {
         state.pendingInterlude.shift();
-        hideInterlude();
+        hideInterlude(false);
         endSession();
         return;
     }
@@ -757,11 +823,14 @@ function showInterlude() {
     }
 
     el.classList.remove("hidden");
-    el.focus();
+    lockBodyScroll();
+    el.scrollTop = 0;
+    el.focus({ preventScroll: true });
 }
 
-function hideInterlude() {
+function hideInterlude(unlock = true) {
     document.getElementById("interlude").classList.add("hidden");
+    if (unlock) unlockBodyScroll();
 }
 
 function onInterludeContinue() {
@@ -789,7 +858,7 @@ function onInterludeContinue() {
     saveProgress();
 
     if (state.pendingInterlude.length > 0) {
-        hideInterlude();
+        hideInterlude(false);
         setTimeout(() => {
             state.interludeBusy = false;
             showInterlude();
