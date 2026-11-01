@@ -370,6 +370,12 @@ rof/
 │   ├── darts.js
 │   ├── PLAN.md
 │   └── README.md
+├── tetris-protocol/          # Tetris Protocol drop puzzle
+│   ├── index.html
+│   ├── tetris.css
+│   ├── tetris.js
+│   ├── PLAN.md
+│   └── README.md
 └── data/
     ├── facts.json
     ├── secrets.json
