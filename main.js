@@ -657,7 +657,7 @@ async function handleAnswer(value) {
     updateScoreDisplay();
 
     freezeTimerBar();
-    revealAnswer(q);
+    revealPlayerImageFeedback(q, value);
 
     buildInterludeForLevel(state.level);
 
@@ -691,7 +691,6 @@ async function onTimeout() {
     markChoiceButtonsOnTimeout(q);
 
     freezeTimerBar();
-    revealAnswer(q);
 
     buildInterludeForLevel(state.level);
 
@@ -730,29 +729,34 @@ function isCorrect(q, value) {
     }
 }
 
-function aiImageIds(q) {
-    switch (q.mode) {
-        case 1:
-            return q.answer === "fake" ? new Set([q.images[0].id]) : new Set();
-        case 2:
-            return new Set([q.answer]);
-        case 3:
-            if (q.answer === "all_fake") return new Set(q.images.map(i => i.id));
-            if (q.answer === "all_real") return new Set();
-            return new Set([q.answer]);
-        case 4:
-            return new Set(q.answer);
-        default:
-            return new Set();
-    }
-}
+function revealPlayerImageFeedback(q, value) {
+    const cards = document.querySelectorAll(".card");
 
-function revealAnswer(q) {
-    const aiIds = aiImageIds(q);
-    document.querySelectorAll(".card").forEach(card => {
-        const id = card.dataset.imageId;
-        card.classList.add(aiIds.has(id) ? "is-ai" : "is-real");
-    });
+    // Mode 1: single image, player said "real" or "fake".
+    if (q.mode === 1) {
+        const isFake = q.answer === "fake";
+        const playerSaidFake = value === "fake";
+        cards.forEach(card => {
+            card.classList.add(playerSaidFake === isFake ? "pick-correct" : "pick-wrong");
+        });
+        return;
+    }
+
+    // Mode 4: multiselect — per-image correctness.
+    if (q.mode === 4) {
+        const truth = new Set(q.answer);
+        const picked = new Set(value || []);
+        cards.forEach(card => {
+            const id = card.dataset.imageId;
+            const playerFlagged = picked.has(id);
+            const isFake = truth.has(id);
+            card.classList.add(playerFlagged === isFake ? "pick-correct" : "pick-wrong");
+        });
+        return;
+    }
+
+    // Modes 2 and 3: single whole-question pick — no per-image signal.
+    // Leave cards neutral.
 }
 
 function markChoiceButtons(q, value, correct) {
