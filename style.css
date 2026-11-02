@@ -616,6 +616,49 @@ body::after {
     box-shadow: var(--glow-strong);
 }
 
+.choice.correct,
+.choice.correct:disabled,
+.choice.correct.disabled {
+    border-color: var(--good) !important;
+    color: var(--good) !important;
+    box-shadow: 0 0 12px rgba(77, 255, 156, 0.55) !important;
+    opacity: 1 !important;
+}
+
+.choice.wrong,
+.choice.wrong:disabled,
+.choice.wrong.disabled {
+    border-color: var(--bad) !important;
+    color: var(--bad) !important;
+    box-shadow: 0 0 12px rgba(255, 107, 122, 0.55) !important;
+    text-decoration: line-through;
+    opacity: 1 !important;
+}
+
+.choice.missed,
+.choice.missed:disabled,
+.choice.missed.disabled {
+    border-color: var(--bad) !important;
+    border-style: dashed !important;
+    color: var(--bad) !important;
+    box-shadow: 0 0 12px rgba(255, 107, 122, 0.35) !important;
+    opacity: 1 !important;
+}
+
+.choice.toggle.selected.correct {
+    background: var(--good);
+    border-color: var(--good);
+    color: var(--bg) !important;
+    text-shadow: none;
+}
+
+.choice.toggle.selected.wrong {
+    background: var(--bad);
+    border-color: var(--bad);
+    color: var(--bg) !important;
+    text-shadow: none;
+}
+
 .choice.submit {
     background: var(--good);
     border-color: var(--good);

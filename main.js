@@ -640,6 +640,7 @@ async function handleAnswer(value) {
 
     const q = state.currentQuestion;
     const correct = isCorrect(q, value);
+    markChoiceButtons(q, value, correct);
     const fb = document.getElementById("feedback");
 
     if (correct) {
@@ -687,10 +688,7 @@ async function onTimeout() {
 
     document.getElementById("btn-next").classList.remove("hidden");
 
-    document.querySelectorAll("#choices .choice").forEach(el => {
-        el.classList.add("disabled");
-        el.disabled = true;
-    });
+    markChoiceButtonsOnTimeout(q);
 
     freezeTimerBar();
     revealAnswer(q);
@@ -754,6 +752,59 @@ function revealAnswer(q) {
     document.querySelectorAll(".card").forEach(card => {
         const id = card.dataset.imageId;
         card.classList.add(aiIds.has(id) ? "is-ai" : "is-real");
+    });
+}
+
+function markChoiceButtons(q, value, correct) {
+    const container = document.getElementById("choices");
+
+    if (q.mode === 4) {
+        const truth = new Set(q.answer);
+        const picked = new Set(value || []);
+        container.querySelectorAll(".choice.toggle").forEach(btn => {
+            const id = btn.dataset.imageId;
+            const wasPicked = picked.has(id);
+            const isFake = truth.has(id);
+            if (wasPicked && isFake) btn.classList.add("correct");
+            else if (wasPicked && !isFake) btn.classList.add("wrong");
+            else if (!wasPicked && isFake) btn.classList.add("missed");
+            btn.disabled = true;
+        });
+        const submit = container.querySelector(".choice.submit");
+        if (submit) submit.disabled = true;
+        return;
+    }
+
+    container.querySelectorAll(".choice").forEach(btn => {
+        if (btn.dataset.value === value) {
+            btn.classList.add(correct ? "correct" : "wrong");
+        }
+        btn.disabled = true;
+    });
+
+    if (!correct) {
+        const truthBtn = container.querySelector(`.choice[data-value="${q.answer}"]`);
+        if (truthBtn) truthBtn.classList.add("correct");
+    }
+}
+
+function markChoiceButtonsOnTimeout(q) {
+    const container = document.getElementById("choices");
+
+    if (q.mode === 4) {
+        const truth = new Set(q.answer);
+        container.querySelectorAll(".choice.toggle").forEach(btn => {
+            if (truth.has(btn.dataset.imageId)) btn.classList.add("correct");
+            btn.disabled = true;
+        });
+        const submit = container.querySelector(".choice.submit");
+        if (submit) submit.disabled = true;
+        return;
+    }
+
+    container.querySelectorAll(".choice").forEach(btn => {
+        if (btn.dataset.value === q.answer) btn.classList.add("correct");
+        btn.disabled = true;
     });
 }
 
