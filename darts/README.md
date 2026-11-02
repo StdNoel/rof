@@ -20,16 +20,18 @@ python -m http.server 8000
 
 | Action | Binding |
 |---|---|
-| Aim | Move the mouse over the board or use the arrow keys |
-| Lock aim | Click, tap, `Space`, or `Enter` |
+| Aim (mouse / keyboard) | Move the mouse over the board or use the arrow keys |
+| Aim (touch) | Drag on the board; release to lock the aim |
+| Lock aim | Click, release a touch drag, `Space`, or `Enter` |
 | Stop horizontal bar | Click, tap, `Space`, or `Enter` |
 | Stop vertical bar | Click, tap, `Space`, or `Enter` |
 | Quit during play / cancel quit | `Esc` |
 | Ready / next round / rematch | `Enter` |
 
 A throw takes three steps: aim at the target, lock the aim, then stop the
-horizontal and vertical precision-timing bars. Clicking or tapping locks the
-aim first, so a click on the board no longer throws immediately.
+horizontal and vertical precision-timing bars. On touch screens, drag the
+reticle into place and lift your finger to lock it, then tap once for each
+timing bar.
 
 If the pointer is away from the board and no keyboard aim is active, the
 reticle is hidden and throws are ignored. The page does not scroll or zoom

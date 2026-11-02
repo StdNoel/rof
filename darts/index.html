@@ -114,10 +114,14 @@
                             <span>One drink = worse aim and blurrier vision. The bot gets drunk too.</span>
                         </div>
 
-                        <div class="controls-hint">
+                        <div class="controls-hint keyboard-hint">
                             <kbd>Mouse</kbd> / <kbd>Arrows</kbd> aim &middot;
                             <kbd>Click</kbd> / <kbd>Space</kbd> lock aim and stop both bars &middot;
                             <kbd>Esc</kbd> quit
+                        </div>
+                        <div class="controls-hint touch-hint">
+                            Drag on the board to aim &middot; release to lock &middot;
+                            tap to stop each timing bar
                         </div>
 
                         <p class="disclaimer">
@@ -161,7 +165,7 @@
                     <div class="board-stage drunk-0" id="board-stage">
                         <div class="board-frame" id="board-frame">
                             <canvas id="board" tabindex="0"
-                                aria-label="Dartboard. Move the pointer or arrow keys to aim, then click or press Space to lock the aim. Stop the horizontal and vertical timing bars to throw."></canvas>
+                                aria-label="Dartboard. Drag to aim and release to lock, or move the pointer or arrow keys and press Space. Tap to stop the horizontal and vertical timing bars."></canvas>
                             <div class="drunk-blur" aria-hidden="true"></div>
                             <div class="drunk-overlay" aria-hidden="true"></div>
                             <canvas id="fx" aria-hidden="true"></canvas>
@@ -181,7 +185,7 @@
                     </div>
                     <div class="throw-bar">
                         <div class="darts-left" id="darts-left" aria-label="Darts left this turn"></div>
-                        <p class="status-line" id="status-line">Aim at the board, then click or press Space to lock in.</p>
+                        <p class="status-line" id="status-line">Drag to aim, release to lock, then tap to stop each bar.</p>
                     </div>
                 </div>
 

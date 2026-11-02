@@ -318,6 +318,7 @@
         dom.screenMatch = el("screen-match");
         dom.lobbyMute = el("lobby-mute");
         dom.matchMute = el("match-mute");
+        dom.matchPause = el("match-pause");
         dom.effectsToggle = el("effects-toggle");
         dom.startBtn = el("start-btn");
         dom.recordsLine = el("records-line");
@@ -386,6 +387,13 @@
         state.screen = name;
         dom.screenLobby.classList.toggle("active", name === "lobby");
         dom.screenMatch.classList.toggle("active", name === "match");
+        updatePauseButton();
+    }
+
+    function updatePauseButton() {
+        if (!dom.matchPause) return;
+        const show = state.screen === "match" && state.game && !state.game.over && !state.paused;
+        dom.matchPause.classList.toggle("hidden", !show);
     }
 
     function hideOverlays() {
@@ -1403,6 +1411,7 @@
 
         dom.goNote.classList.toggle("hidden", !newBest);
         dom.gameoverOverlay.classList.remove("hidden");
+        updatePauseButton();
         dom.goRetry.focus();
     }
 
@@ -1504,6 +1513,7 @@
             dom.pauseEffects.textContent = state.settings.reducedEffects ? "Effects reduced" : "Reduce effects";
         }
         dom.pauseOverlay.classList.remove("hidden");
+        updatePauseButton();
         dom.pauseResume.focus();
         announce("Protocol paused.");
     }
@@ -1513,6 +1523,7 @@
         state.paused = false;
         state.lastFrame = performance.now();
         dom.pauseOverlay.classList.add("hidden");
+        updatePauseButton();
         announce("Resumed.");
     }
 
@@ -1537,6 +1548,7 @@
         }
         state.paused = true;
         releaseInputs();
+        updatePauseButton();
         dom.quitOverlay.classList.remove("hidden");
         dom.quitCancel.focus();
         announce("Quit confirmation.");
@@ -1726,6 +1738,7 @@
 
         dom.lobbyMute.addEventListener("click", toggleMute);
         dom.matchMute.addEventListener("click", toggleMute);
+        dom.matchPause.addEventListener("click", openPause);
         dom.effectsToggle.addEventListener("click", toggleEffects);
         dom.startBtn.addEventListener("click", startGame);
         dom.resetRecords.addEventListener("click", resetRecords);

@@ -118,7 +118,7 @@
                                 overload.</span>
                         </div>
 
-                        <div class="controls-hint">
+                        <div class="controls-hint keyboard-hint">
                             <kbd>WASD</kbd> / <kbd>Arrows</kbd> move &middot;
                             <kbd>Q</kbd>/<kbd>Z</kbd> rotate CCW &middot;
                             <kbd>C</kbd> hold &middot;
@@ -126,7 +126,12 @@
                             <kbd>Esc</kbd> pause
                         </div>
 
-                        <p class="disclaimer">
+                        <div class="controls-hint touch-hint">
+                            Each player gets an on-screen pad in the match.
+                            Use the HUD pause button to stop the run.
+                        </div>
+
+                        <p class="disclaimer keyboard-hint">
                             P2 in local VS: arrows move, <kbd>,</kbd> rotate CCW,
                             <kbd>.</kbd> hold, <kbd>Enter</kbd> hard drop.
                         </p>
@@ -146,10 +151,16 @@
                     <span class="hud-mode" id="hud-mode">Solo vs Firewall</span>
                     <span class="hud-sub" id="hud-sub">Standard pressure</span>
                 </div>
-                <button id="match-mute" class="chip-btn" type="button" aria-pressed="false">
-                    <span class="chip-dot" aria-hidden="true"></span>
-                    <span class="chip-label">Sound on</span>
-                </button>
+                <div class="hud-actions">
+                    <button id="match-pause" class="chip-btn pause-btn" type="button" aria-label="Pause protocol">
+                        <span aria-hidden="true">&#10074;&#10074;</span>
+                        <span class="chip-label">Pause</span>
+                    </button>
+                    <button id="match-mute" class="chip-btn" type="button" aria-pressed="false">
+                        <span class="chip-dot" aria-hidden="true"></span>
+                        <span class="chip-label">Sound on</span>
+                    </button>
+                </div>
             </header>
 
             <main class="match-main">
@@ -200,9 +211,9 @@
                             <button type="button" data-player="0" data-action="left" aria-label="Move left">&larr;</button>
                             <button type="button" data-player="0" data-action="soft" aria-label="Soft drop">&darr;</button>
                             <button type="button" data-player="0" data-action="right" aria-label="Move right">&rarr;</button>
+                            <button type="button" data-player="0" data-action="hold" aria-label="Hold piece">HOLD</button>
                             <button type="button" data-player="0" data-action="ccw" aria-label="Rotate counter-clockwise">&#8634;</button>
                             <button type="button" data-player="0" data-action="cw" aria-label="Rotate clockwise">&#8635;</button>
-                            <button type="button" data-player="0" data-action="hold" aria-label="Hold piece">HOLD</button>
                             <button type="button" data-player="0" data-action="drop" aria-label="Hard drop">DROP</button>
                         </div>
                     </article>
@@ -248,9 +259,9 @@
                             <button type="button" data-player="1" data-action="left" aria-label="Move left">&larr;</button>
                             <button type="button" data-player="1" data-action="soft" aria-label="Soft drop">&darr;</button>
                             <button type="button" data-player="1" data-action="right" aria-label="Move right">&rarr;</button>
+                            <button type="button" data-player="1" data-action="hold" aria-label="Hold piece">HOLD</button>
                             <button type="button" data-player="1" data-action="ccw" aria-label="Rotate counter-clockwise">&#8634;</button>
                             <button type="button" data-player="1" data-action="cw" aria-label="Rotate clockwise">&#8635;</button>
-                            <button type="button" data-player="1" data-action="hold" aria-label="Hold piece">HOLD</button>
                             <button type="button" data-player="1" data-action="drop" aria-label="Hard drop">DROP</button>
                         </div>
                     </article>

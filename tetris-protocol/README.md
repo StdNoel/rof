@@ -27,10 +27,11 @@ python -m http.server 8000
 | Rotate CW | `W` / `↑` | `↑` |
 | Rotate CCW | `Q` / `Z` | `,` |
 | Hold | `C` / `Shift` | `.` |
-| Pause / resume | `Esc` | `Esc` |
+| Pause / resume | `Esc` / HUD pause button | `Esc` / HUD pause button |
 
 In local VS, Player 1 uses `A`/`D`/`S`/`W`/`Q`/`Z`/`C`/`Space` so both boards
-can be played at once. On touch devices, each board gets its own on-screen pad.
+can be played at once. On touch devices, each board gets its own two-row
+on-screen pad, and the match HUD includes a pause button.
 
 The page pauses automatically when the window loses focus or the tab is hidden.
 

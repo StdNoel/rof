@@ -180,7 +180,7 @@
         const ids = [
             "screen-lobby", "screen-game", "lobby-settings", "lobby-best", "start-btn",
             "reset-progress",
-            "game-settings", "hp-pips", "hud-score", "hud-distance", "boost-track",
+            "game-pause", "game-settings", "hp-pips", "hud-score", "hud-distance", "boost-track",
             "boost-fill", "boost-label", "canvas-wrap", "game", "boost-tint", "touch-boost",
             "pause-overlay", "pause-resume", "pause-settings", "pause-quit",
             "gameover-overlay", "go-score", "go-distance", "go-best", "go-character",
@@ -511,6 +511,7 @@
         resizeCanvas();
         updateHud(g);
         updateTouchBoost();
+        updatePauseButton();
         lastFrame = performance.now();
     }
 
@@ -538,6 +539,7 @@
         dom.boostTint.classList.remove("on");
         dom.touchBoost.classList.remove("visible");
         showScreen("lobby");
+        updatePauseButton();
         dom.startBtn.focus({ preventScroll: true });
     }
 
@@ -566,6 +568,7 @@
         dom.boostTint.classList.remove("on");
         dom.touchBoost.classList.remove("visible");
         updateLobby();
+        updatePauseButton();
         focusInside(dom.gameoverOverlay);
     }
 
@@ -1513,8 +1516,17 @@
     // ============================================================
     // Settings & pause UI
     // ============================================================
+    const coarsePointerQuery = window.matchMedia("(any-pointer: coarse)");
+
     function isTouchDevice() {
-        return ("ontouchstart" in window) || navigator.maxTouchPoints > 0;
+        return coarsePointerQuery.matches || ("ontouchstart" in window) ||
+            navigator.maxTouchPoints > 0;
+    }
+
+    function updatePauseButton() {
+        const g = state.game;
+        const show = state.screen === "game" && g && g.active && !g.over && !g.paused;
+        dom.gamePause.classList.toggle("hidden", !show);
     }
 
     function focusableIn(root) {
@@ -1591,6 +1603,7 @@
         cancelCapture();
         applySettingsUi();
         updateTouchBoost();
+        updatePauseButton();
         dom.settingsClose.focus({ preventScroll: true });
     }
 
@@ -1609,6 +1622,7 @@
             }
         }
         updateTouchBoost();
+        updatePauseButton();
     }
 
     function pauseGame(focusPrimaryAction) {
@@ -1618,6 +1632,7 @@
         dom.pauseOverlay.classList.remove("hidden");
         if (focusPrimaryAction) focusInside(dom.pauseOverlay);
         updateTouchBoost();
+        updatePauseButton();
     }
 
     function resumeGame() {
@@ -1627,6 +1642,7 @@
         dom.pauseOverlay.classList.add("hidden");
         lastFrame = performance.now();
         updateTouchBoost();
+        updatePauseButton();
     }
 
     function togglePause() {
@@ -1812,6 +1828,7 @@
 
         dom.lobbySettings.addEventListener("click", openSettings);
         dom.gameSettings.addEventListener("click", openSettings);
+        dom.gamePause.addEventListener("click", () => pauseGame(true));
         dom.startBtn.addEventListener("click", () => startRun(state.selected));
         dom.resetProgress.addEventListener("click", () => {
             if (!window.confirm("Reset all Midnight Runner best scores?")) return;
@@ -1897,6 +1914,7 @@
         applySettingsUi();
         updateLobby();
         bindEvents();
+        updatePauseButton();
         resizeCanvas();
         lastFrame = performance.now();
         requestAnimationFrame(loop);

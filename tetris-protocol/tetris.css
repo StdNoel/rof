@@ -133,7 +133,11 @@ kbd {
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    padding: 16px clamp(14px, 4vw, 32px);
+    padding:
+        max(16px, env(safe-area-inset-top))
+        max(clamp(14px, 4vw, 32px), env(safe-area-inset-right))
+        max(16px, env(safe-area-inset-bottom))
+        max(clamp(14px, 4vw, 32px), env(safe-area-inset-left));
 }
 
 .back-link,
@@ -566,6 +570,21 @@ kbd {
     line-height: 2;
 }
 
+.touch-hint {
+    display: none;
+}
+
+@media (any-pointer: coarse) {
+    .keyboard-hint,
+    .key-hint {
+        display: none;
+    }
+
+    .touch-hint {
+        display: block;
+    }
+}
+
 .disclaimer {
     margin: 14px 0 0;
     color: var(--muted);
@@ -579,6 +598,22 @@ kbd {
     height: 100dvh;
     min-height: 0;
     overflow: hidden;
+    overscroll-behavior: none;
+    padding:
+        max(0px, env(safe-area-inset-top))
+        max(0px, env(safe-area-inset-right))
+        max(0px, env(safe-area-inset-bottom))
+        max(0px, env(safe-area-inset-left));
+}
+
+.hud-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.pause-btn {
+    gap: 6px;
 }
 
 #screen-match.active {
@@ -873,10 +908,10 @@ kbd {
 }
 
 .touch-pad button[data-action="hold"] {
-    grid-column: span 2;
+    grid-column: auto;
 }
 
-@media (hover: none), (pointer: coarse) {
+@media (any-hover: none), (any-pointer: coarse) {
     .touch-pad {
         display: grid;
     }
@@ -1149,7 +1184,11 @@ body.reduced .scanlines {
     }
 
     .boards-area.duo .playfield {
-        height: min(30dvh, 300px);
+        height: min(24dvh, 240px);
+    }
+
+    .boards-area.duo .touch-pad button {
+        min-height: 40px;
     }
 
     .boards-area.duo .preview-panel {
@@ -1243,6 +1282,59 @@ body.reduced .scanlines {
     .playfield,
     .firewall-panel {
         height: min(42dvh, 380px);
+    }
+}
+
+@media (orientation: landscape) and (max-height: 560px) {
+    .match-main {
+        padding: 2px 6px;
+    }
+
+    .match-hud {
+        padding:
+            max(6px, env(safe-area-inset-top))
+            max(10px, env(safe-area-inset-right))
+            max(6px, env(safe-area-inset-bottom))
+            max(10px, env(safe-area-inset-left));
+    }
+
+    .player-stage {
+        gap: 4px;
+    }
+
+    .player-banner {
+        padding: 0 2px;
+    }
+
+    .side-rail {
+        width: 52px;
+    }
+
+    .preview-panel {
+        display: none;
+    }
+
+    .playfield,
+    .firewall-panel {
+        height: min(54dvh, 420px);
+    }
+
+    .boards-area.duo .playfield {
+        height: min(54dvh, 420px);
+    }
+
+    .boards-area.duo .side-rail {
+        width: 48px;
+    }
+
+    .touch-pad {
+        gap: 4px;
+        padding: 4px;
+    }
+
+    .touch-pad button {
+        min-height: 34px;
+        font-size: 0.62rem;
     }
 }
 

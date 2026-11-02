@@ -46,6 +46,15 @@ const TIMING_STOP_MS = 260;
     const COLORS = { p1: "#ffb347", p2: "#2ee6d0" };
     const PLAYER_NAMES = ["Player 1", "Player 2"];
     const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const coarsePointerQuery = window.matchMedia("(any-pointer: coarse)");
+
+    function isTouchDevice() {
+        return coarsePointerQuery.matches || navigator.maxTouchPoints > 0;
+    }
+
+    function prefersTouchUi() {
+        return input.lastDevice === "touch";
+    }
 
     // ============================================================
     // Helpers
@@ -189,7 +198,13 @@ function timingQuality(offset) {
 
     const dom = {};
     const view = { size: 0, dpr: 1, cx: 0, cy: 0, R: 0 };
-    const input = { pointer: null, hover: null, keyboard: null, lastDevice: "pointer" };
+    const input = {
+        pointer: null,
+        hover: null,
+        keyboard: null,
+        lastDevice: isTouchDevice() ? "touch" : "pointer",
+    };
+    const drag = { active: false, pointerId: null, point: null };
     const popups = [];
     const audio = { ctx: null, muted: state.settings.muted };
 
@@ -573,10 +588,19 @@ function timingQuality(offset) {
     }
 
     function eventPoint(event) {
-        const layout = dom.board.clientWidth || view.size;
-        const scale = view.size / layout;
-        const px = event.offsetX * scale;
-        const py = event.offsetY * scale;
+        const rect = dom.board.getBoundingClientRect();
+        let px;
+        let py;
+        if (rect.width && rect.height && Number.isFinite(event.clientX) &&
+            Number.isFinite(event.clientY)) {
+            px = (event.clientX - rect.left) * (view.size / rect.width);
+            py = (event.clientY - rect.top) * (view.size / rect.height);
+        } else {
+            const layout = dom.board.clientWidth || view.size;
+            const scale = view.size / layout;
+            px = event.offsetX * scale;
+            py = event.offsetY * scale;
+        }
         return { x: (px - view.cx) / view.R, y: (py - view.cy) / view.R };
     }
 
@@ -1383,6 +1407,7 @@ function timingQuality(offset) {
         const match = state.match;
         if (!match) return;
         const player = match.players[match.active];
+        const touch = prefersTouchUi();
 
         dom.hudRound.textContent = "Round " + match.round;
 
@@ -1405,15 +1430,17 @@ function timingQuality(offset) {
                 turnText = player.isBot ? player.name + " is aiming" : player.name + " to throw";
                 status = player.isBot
                     ? player.name + " is aiming..."
-                    : "Aim, then click or press Space to lock in. " + match.dartsLeft + " dart" + (match.dartsLeft === 1 ? "" : "s") + " left.";
+                    : touch
+                        ? "Drag to aim, release to lock. " + match.dartsLeft + " dart" + (match.dartsLeft === 1 ? "" : "s") + " left."
+                        : "Aim, then click or press Space to lock in. " + match.dartsLeft + " dart" + (match.dartsLeft === 1 ? "" : "s") + " left.";
                 break;
             case "timing": {
                 const stage = match.timing ? match.timing.stage : "horizontal";
                 turnText = "Precision timing";
                 status = stage === "horizontal"
-                    ? "Click or press Space to stop the horizontal bar."
+                    ? (touch ? "Tap to stop the horizontal bar." : "Click or press Space to stop the horizontal bar.")
                     : stage === "vertical"
-                        ? "Click or press Space to stop the vertical bar."
+                        ? (touch ? "Tap to stop the vertical bar." : "Click or press Space to stop the vertical bar.")
                         : "Dart away...";
                 break;
             }
@@ -1738,15 +1765,45 @@ function timingQuality(offset) {
         sfx("click");
     }
 
+    function updateTouchAim(event) {
+        const point = eventPoint(event);
+        drag.point = point;
+        input.pointer = point;
+        input.hover = point;
+        input.keyboard = null;
+        input.lastDevice = "touch";
+        return point;
+    }
+
+    function releasePointer(pointerId) {
+        try {
+            if (dom.board.hasPointerCapture && dom.board.hasPointerCapture(pointerId)) {
+                dom.board.releasePointerCapture(pointerId);
+            }
+        } catch (err) { /* pointer capture unavailable */ }
+    }
+
     function bindBoardInput() {
         dom.board.addEventListener("pointermove", (event) => {
-            if (event.pointerType !== "mouse" || state.screen !== "match") return;
+            if (state.screen !== "match") return;
+
+            if (drag.active && event.pointerId === drag.pointerId) {
+                if (state.paused) return;
+                const match = state.match;
+                if (!match || match.phase !== "aim") return;
+                event.preventDefault();
+                updateTouchAim(event);
+                return;
+            }
+
+            if (event.pointerType !== "mouse") return;
             input.hover = eventPoint(event);
             input.keyboard = null;
             input.lastDevice = "pointer";
         });
 
-        dom.board.addEventListener("pointerleave", () => {
+        dom.board.addEventListener("pointerleave", (event) => {
+            if (drag.active || event.pointerType !== "mouse") return;
             input.hover = null;
         });
 
@@ -1756,6 +1813,7 @@ function timingQuality(offset) {
             if (!match) return;
             const player = match.players[match.active];
             if (player.isBot) return;
+            if (event.isPrimary === false) return;
 
             if (match.phase === "timing") {
                 event.preventDefault();
@@ -1767,11 +1825,51 @@ function timingQuality(offset) {
             if (match.phase !== "aim") return;
             event.preventDefault();
             ensureAudio();
-            const point = eventPoint(event);
-            input.pointer = point;
-            input.hover = point;
-            input.keyboard = null;
+
+            if (event.pointerType === "mouse") {
+                const point = eventPoint(event);
+                input.pointer = point;
+                input.hover = point;
+                input.keyboard = null;
+                input.lastDevice = "pointer";
+                lockHumanAim(point);
+                return;
+            }
+
+            drag.active = true;
+            drag.pointerId = event.pointerId;
+            updateTouchAim(event);
+            try {
+                dom.board.setPointerCapture(event.pointerId);
+            } catch (err) { /* pointer capture unavailable */ }
+        });
+
+        dom.board.addEventListener("pointerup", (event) => {
+            if (!drag.active || event.pointerId !== drag.pointerId) return;
+            const pointerId = drag.pointerId;
+            const point = drag.point || eventPoint(event);
+            drag.active = false;
+            drag.pointerId = null;
+            drag.point = null;
+            releasePointer(pointerId);
+            if (state.screen !== "match" || state.paused) return;
+            const match = state.match;
+            if (!match || match.phase !== "aim") return;
+            const player = match.players[match.active];
+            if (player.isBot) return;
+            event.preventDefault();
             lockHumanAim(point);
+        });
+
+        dom.board.addEventListener("pointercancel", (event) => {
+            if (!drag.active || event.pointerId !== drag.pointerId) return;
+            const pointerId = drag.pointerId;
+            drag.active = false;
+            drag.pointerId = null;
+            drag.point = null;
+            input.pointer = null;
+            input.hover = null;
+            releasePointer(pointerId);
         });
 
         dom.board.addEventListener("contextmenu", (event) => event.preventDefault());

@@ -927,12 +927,14 @@ body::after {
     transition: filter .15s, transform .05s, box-shadow .15s;
 }
 
-.minigame-card:hover {
-    filter: brightness(1.25);
-    box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.08),
-        inset 0 -1px 0 rgba(0, 0, 0, 0.5),
-        var(--glow-strong);
+@media (hover: hover) and (pointer: fine) {
+    .minigame-card:hover {
+        filter: brightness(1.25);
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.08),
+            inset 0 -1px 0 rgba(0, 0, 0, 0.5),
+            var(--glow-strong);
+    }
 }
 
 .minigame-card:active {
@@ -985,6 +987,24 @@ body::after {
 
     .minigame-grid {
         grid-template-columns: 1fr;
+    }
+}
+
+@media (max-height: 500px) and (orientation: landscape) {
+    .minigames-intro {
+        padding: 12px 0 20px;
+    }
+
+    .minigames-page .title {
+        font-size: 1.8rem;
+    }
+
+    .minigame-grid {
+        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    }
+
+    .minigame-card {
+        padding: 18px;
     }
 }
 

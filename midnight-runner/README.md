@@ -19,6 +19,7 @@ python -m http.server 8000
 | Start / retry | `Enter` |
 | Mobile move | Swipe on the canvas |
 | Mobile boost | On-screen button (Manual mode) |
+| Mobile pause | Pause button in the game HUD |
 
 ## Characters
 
