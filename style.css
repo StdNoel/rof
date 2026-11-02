@@ -531,7 +531,7 @@ body::after {
 
     .card .label {
         top: 14px;
-        left: 14px;
+        right: 14px;
         padding: 3px 8px;
         font-size: .7rem;
     }

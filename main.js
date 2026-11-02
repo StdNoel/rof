@@ -730,7 +730,7 @@ function isCorrect(q, value) {
 }
 
 function revealPlayerImageFeedback(q, value) {
-    const cards = document.querySelectorAll(".card");
+    const cards = Array.from(document.querySelectorAll(".card"));
 
     // Mode 1: single image, player said "real" or "fake".
     if (q.mode === 1) {
@@ -738,6 +738,36 @@ function revealPlayerImageFeedback(q, value) {
         const playerSaidFake = value === "fake";
         cards.forEach(card => {
             card.classList.add(playerSaidFake === isFake ? "pick-correct" : "pick-wrong");
+        });
+        return;
+    }
+
+    // Modes 2 and 3: player picked a single image id, OR (mode 3 only)
+    // "all_real" / "all_fake".
+    if (q.mode === 2 || q.mode === 3) {
+        // Special "all" answers (mode 3 only).
+        if (value === "all_real" || value === "all_fake") {
+            // If the player's all-real/all-fake read is correct, every
+            // card agrees with their judgment → mark them all green.
+            // If wrong, they didn't judge individual images, so leave
+            // the cards neutral; the button + feedback box carry it.
+            if (value === q.answer) {
+                cards.forEach(card => card.classList.add("pick-correct"));
+            }
+            return;
+        }
+
+        // Single-image pick: mark only the chosen card. On a wrong pick,
+        // also reveal the true fake card in green so the player learns
+        // which one actually was fake.
+        const correct = value === q.answer;
+        cards.forEach(card => {
+            const id = card.dataset.imageId;
+            if (id === value) {
+                card.classList.add(correct ? "pick-correct" : "pick-wrong");
+            } else if (!correct && id === q.answer) {
+                card.classList.add("pick-correct");
+            }
         });
         return;
     }
@@ -754,9 +784,6 @@ function revealPlayerImageFeedback(q, value) {
         });
         return;
     }
-
-    // Modes 2 and 3: single whole-question pick — no per-image signal.
-    // Leave cards neutral.
 }
 
 function markChoiceButtons(q, value, correct) {
