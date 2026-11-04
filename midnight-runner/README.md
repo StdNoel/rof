@@ -31,6 +31,7 @@ python -m http.server 8000
 
 ## Rules
 
+- Every generated row keeps at least two open lanes with frequent cross-connections, plus occasional single-cell clutter, so you can weave around hazards instead of being funneled down one corridor.
 - 3 HP. Enemy, hazard, and projectile contact costs 1 HP and grants 1.2 s of invulnerability.
 - Coins, chests, and heal pickups spawn on open floor. Coins and chests fill the boost gauge.
 - Boost makes you immune to enemies, hazards, and projectiles, and destroys enemies on contact. Walls still block. The collapse is always lethal.

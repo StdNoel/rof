@@ -96,7 +96,9 @@ the third drink onward shows afterimages. Timing periods are approximate.
 Blur is applied as a layer over the board, so the aim reticle stays sharp and
 interactive. From the third drink onward the board blur deepens and the
 timing tracks blur slightly too; a dark backing strip keeps the bars legible.
-Drunk visuals follow the active human shooter. The bot's drunkenness affects
+At four drinks a rotating dizziness vignette spins over the board, extends just
+past its rim, and the frame tilts gently. The vignette is non-interactive, so
+clicking or tapping still locks aim and stops both timing bars. Drunk visuals follow the active human shooter. The bot's drunkenness affects
 its accuracy and hidden timing, so your view stays clear on the bot's turn. In
 2-player mode, the blur follows whichever player is throwing.
 
@@ -120,7 +122,8 @@ bars appear during its turn.
 | `lc-best-v1` | Solo wins/losses and best win per difficulty; duo wins and best win per player |
 
 - **Reduce drunk effects** keeps the accuracy and timing penalties but softens
-  blur and removes sway, afterimages, and pulsing. `prefers-reduced-motion`
+  blur and removes sway, the level-4 spin/tilt, afterimages, and pulsing; the
+  dizziness layer stays as a calm static vignette. `prefers-reduced-motion`
   does the same.
 - Mute and reduce-effects are remembered across sessions.
 - **Reset records** clears only `lc-best-v1`, after confirmation.

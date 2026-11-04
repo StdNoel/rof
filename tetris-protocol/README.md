@@ -33,6 +33,16 @@ In local VS, Player 1 uses `A`/`D`/`S`/`W`/`Q`/`Z`/`C`/`Space` so both boards
 can be played at once. On touch devices, each board gets its own two-row
 on-screen pad, and the match HUD includes a pause button.
 
+Player 1 / Solo binds are remappable from the lobby. Select a key in the
+**Key binds** field, then press the replacement key. Bindings use physical key
+codes, so they stay stable across keyboard layouts. `Escape` cancels capture,
+and reserved keys (`Escape`, `Enter`, arrows, `,`, `.`, `Tab`, `Space`, and
+modifier keys) are rejected with an inline warning so local VS Player 2
+controls keep working. A key already assigned to another action is also
+rejected with an inline warning, and capture stays open so you can try again.
+`Z` and `Shift` remain accessibility fallbacks for rotate CCW and
+hold; arrow keys remain a fallback in solo.
+
 The page pauses automatically when the window loses focus or the tab is hidden.
 
 ## Modes
@@ -82,7 +92,7 @@ The current heat is the highest of the three. Heat 5 is the `Core Dump` state.
 |:---:|---|---|
 | 1 | Faster gravity | Slight chromatic drift |
 | 2 | Faster gravity | Row flicker, subtle sway, slower lateral repeat |
-| 3 | Corruption rows | Dim ghost, grid glitches, stronger shake |
+| 3 | Corruption rows | Bright ghost target, grid glitches, stronger shake |
 | 4 | Fastest gravity | Distortion, heavy glitch artifacts |
 
 ## Solo firewall
@@ -124,13 +134,17 @@ Lock delay is 500 ms with up to 15 move resets.
 
 | Key | Contents |
 |---|---|
-| `tp-settings-v1` | `{ muted, reducedEffects }` |
+| `tp-settings-v1` | `{ muted, reducedEffects, binds: { left, right, soft, cw, ccw, hold, drop } }` |
 | `tp-best-v1` | `{ solo: { bestScore, bestLines, maxHeat }, duo: { p1Wins, p2Wins } }` |
+
+Default binds are `KeyA`, `KeyD`, `KeyS`, `KeyW`, `KeyQ`, `KeyC`, and `Space`.
+Saved binds are merged over those defaults, so older settings or malformed
+values fall back gracefully.
 
 - **Reduce glitch effects** removes shake, chromatic aberration, blur, flicker,
   and scanline animation, but keeps speed, input delay, and garbage mechanics.
   `prefers-reduced-motion` does the same.
-- Mute and reduce-effects are remembered across sessions.
+- Mute, reduce-effects, and Player 1 key binds are remembered across sessions.
 - **Reset records** clears only `tp-best-v1`, after confirmation.
 - Runs and matches are never saved or resumed, and there is no online
   leaderboard.

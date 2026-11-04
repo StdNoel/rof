@@ -889,6 +889,7 @@ kbd {
     width: 100%;
     height: 100%;
     border-radius: 50%;
+    overflow: visible;
     transition: transform 0.55s ease;
     will-change: transform;
 }
@@ -948,6 +949,36 @@ kbd {
     height: 100%;
     border-radius: 50%;
     pointer-events: none;
+}
+
+.dizzy-layer {
+    position: absolute;
+    inset: -6%;
+    z-index: 3;
+    border-radius: 50%;
+    pointer-events: none;
+    opacity: 0;
+    mix-blend-mode: screen;
+    background:
+        radial-gradient(circle at 50% 50%, transparent 26%, rgba(255, 170, 70, 0.1) 58%, rgba(255, 90, 40, 0.16) 78%, transparent 92%),
+        conic-gradient(from 0deg, transparent 0deg, rgba(255, 205, 130, 0.09) 55deg, transparent 125deg, rgba(255, 120, 60, 0.09) 200deg, transparent 285deg);
+    transition: opacity 0.55s ease;
+    will-change: transform;
+}
+
+.board-stage.drunk-4 .dizzy-layer {
+    opacity: 0.55;
+    animation: dizzy-spin 14s linear infinite;
+}
+
+@keyframes dizzy-spin {
+    from { transform: rotate(0deg) scale(1.06); }
+    to { transform: rotate(360deg) scale(1.06); }
+}
+
+@keyframes dizzy-tilt {
+    0%, 100% { rotate: 0deg; }
+    50% { rotate: 1.2deg; }
 }
 
 .timing-ui {
@@ -1101,9 +1132,12 @@ kbd {
 
 .board-stage.drunk-1 .board-frame,
 .board-stage.drunk-2 .board-frame,
-.board-stage.drunk-3 .board-frame,
-.board-stage.drunk-4 .board-frame {
+.board-stage.drunk-3 .board-frame {
     animation: board-sway var(--drunk-duration) ease-in-out infinite;
+}
+
+.board-stage.drunk-4 .board-frame {
+    animation: board-sway var(--drunk-duration) ease-in-out infinite, dizzy-tilt 5.2s ease-in-out infinite;
 }
 
 @keyframes board-sway {
@@ -1354,6 +1388,15 @@ kbd {
     animation: none !important;
 }
 
+#app.reduced .board-stage.drunk-4 .dizzy-layer {
+    animation: none !important;
+    opacity: 0.14;
+}
+
+#app.reduced .board-stage.drunk-4 .board-frame {
+    animation: none !important;
+}
+
 #app.reduced .timing-track {
     filter: none !important;
 }
@@ -1387,6 +1430,15 @@ kbd {
     }
 
     .drunk-overlay {
+        animation: none !important;
+    }
+
+    .board-stage.drunk-4 .dizzy-layer {
+        animation: none !important;
+        opacity: 0.14;
+    }
+
+    .board-stage.drunk-4 .board-frame {
         animation: none !important;
     }
 }

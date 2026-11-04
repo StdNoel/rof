@@ -14,11 +14,35 @@
     const BOARD_H = ROWS * CELL;
     const SETTINGS_KEY = "tp-settings-v1";
     const BEST_KEY = "tp-best-v1";
+    const DEFAULT_BINDS = {
+        left: "KeyA",
+        right: "KeyD",
+        soft: "KeyS",
+        cw: "KeyW",
+        ccw: "KeyQ",
+        hold: "KeyC",
+        drop: "Space",
+    };
+    const BIND_ACTIONS = [
+        { key: "left", label: "Move left" },
+        { key: "right", label: "Move right" },
+        { key: "soft", label: "Soft drop" },
+        { key: "cw", label: "Rotate CW" },
+        { key: "ccw", label: "Rotate CCW" },
+        { key: "hold", label: "Hold" },
+        { key: "drop", label: "Hard drop" },
+    ];
+    const RESERVED_CODES = new Set([
+        "Escape", "Enter", "Tab", "Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
+        "Comma", "Period", "ShiftLeft", "ShiftRight", "ControlLeft", "ControlRight",
+        "AltLeft", "AltRight", "MetaLeft", "MetaRight", "OSLeft", "OSRight", "CapsLock",
+    ]);
     const DAS = 150;
     const ARR = 40;
     const SOFT_INTERVAL = 45;
     const LOCK_DELAY = 500;
     const MAX_LOCK_RESETS = 15;
+    const IDLE_RENDER_INTERVAL = 1000 / 30;
     const HEAT_LINES = [10, 25, 40, 55];
     const HEAT_NAMES = ["Stable", "Warm", "Hot", "Critical", "Overload"];
     const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -127,14 +151,25 @@
     // Persistence
     // ============================================================
     function loadSettings() {
-        const defaults = { muted: false, reducedEffects: false };
+        const binds = Object.assign({}, DEFAULT_BINDS);
+        const defaults = { muted: false, reducedEffects: false, binds };
         try {
             const raw = localStorage.getItem(SETTINGS_KEY);
             if (!raw) return defaults;
             const data = JSON.parse(raw);
+            const savedBinds = data && typeof data.binds === "object" && data.binds ? data.binds : null;
+            if (savedBinds) {
+                for (const action of Object.keys(DEFAULT_BINDS)) {
+                    const code = savedBinds[action];
+                    if (typeof code === "string" && code && !RESERVED_CODES.has(code)) {
+                        binds[action] = code;
+                    }
+                }
+            }
             return {
-                muted: Boolean(data.muted),
-                reducedEffects: Boolean(data.reducedEffects),
+                muted: Boolean(data && data.muted),
+                reducedEffects: Boolean(data && data.reducedEffects),
+                binds,
             };
         } catch (err) {
             return defaults;
@@ -191,6 +226,12 @@
             audio.ctx.resume().catch(() => { });
         }
         return audio.ctx;
+    }
+
+    function resumeAudio() {
+        if (audio.ctx && audio.ctx.state === "suspended") {
+            audio.ctx.resume().catch(() => { });
+        }
     }
 
     function tone(freq, duration, type, gain, slideTo, delay) {
@@ -300,6 +341,8 @@
         paused: false,
         lastFrame: 0,
         raf: 0,
+        renderAcc: 0,
+        capturingAction: null,
     };
     audio.muted = state.settings.muted;
 
@@ -320,6 +363,8 @@
         dom.matchMute = el("match-mute");
         dom.matchPause = el("match-pause");
         dom.effectsToggle = el("effects-toggle");
+        dom.bindGrid = el("bind-grid");
+        dom.bindWarning = el("bind-warning");
         dom.startBtn = el("start-btn");
         dom.recordsLine = el("records-line");
         dom.resetRecords = el("reset-records");
@@ -430,6 +475,74 @@
         document.body.classList.toggle("reduced", prefersReduced());
     }
 
+    function keyLabel(code) {
+        if (!code) return "\u2014";
+        if (code.startsWith("Key")) return code.slice(3);
+        if (code.startsWith("Digit")) return code.slice(5);
+        if (code.startsWith("Numpad")) return "Num " + code.slice(6);
+        if (code === "Space") return "Space";
+        if (code === "ShiftLeft") return "L Shift";
+        if (code === "ShiftRight") return "R Shift";
+        if (code === "ControlLeft") return "L Ctrl";
+        if (code === "ControlRight") return "R Ctrl";
+        if (code === "AltLeft") return "L Alt";
+        if (code === "AltRight") return "R Alt";
+        if (code === "ArrowLeft") return "\u2190";
+        if (code === "ArrowRight") return "\u2192";
+        if (code === "ArrowUp") return "\u2191";
+        if (code === "ArrowDown") return "\u2193";
+        return code;
+    }
+
+    function setBindWarning(message) {
+        if (!dom.bindWarning) return;
+        dom.bindWarning.textContent = message || "";
+    }
+
+    function renderBinds() {
+        if (!dom.bindGrid) return;
+        dom.bindGrid.textContent = "";
+        const binds = state.settings.binds || DEFAULT_BINDS;
+        for (const action of BIND_ACTIONS) {
+            const row = document.createElement("div");
+            row.className = "bind-row";
+            const label = document.createElement("span");
+            label.className = "bind-label";
+            label.textContent = action.label;
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "bind-key";
+            button.dataset.action = action.key;
+            const capturing = state.capturingAction === action.key;
+            button.classList.toggle("capturing", capturing);
+            button.textContent = capturing ? "Press a key\u2026" : keyLabel(binds[action.key]);
+            button.setAttribute(
+                "aria-label",
+                action.label + " key: " + (capturing ? "waiting for input" : keyLabel(binds[action.key]))
+            );
+            button.addEventListener("click", () => beginCapture(action.key));
+            row.appendChild(label);
+            row.appendChild(button);
+            dom.bindGrid.appendChild(row);
+        }
+    }
+
+    function beginCapture(action) {
+        ensureAudio();
+        state.capturingAction = action;
+        setBindWarning("");
+        renderBinds();
+        const button = dom.bindGrid && dom.bindGrid.querySelector('[data-action="' + action + '"]');
+        if (button) button.focus();
+        announce("Press a key for " + action + ". Escape cancels.");
+    }
+
+    function cancelCapture() {
+        state.capturingAction = null;
+        setBindWarning("");
+        renderBinds();
+    }
+
     function renderRecords() {
         if (!dom.recordsLine) return;
         const solo = state.best.solo;
@@ -509,6 +622,10 @@
             flashTimer: 0,
             over: false,
             elapsed: 0,
+            gridDirty: true,
+            gridCanvas: null,
+            gridCtx: null,
+            gridDpr: 0,
         };
         for (let i = 0; i < 4; i += 1) board.queue.push(nextType(board));
         return board;
@@ -770,6 +887,7 @@
             remaining.unshift(new Array(COLS).fill(null));
         }
         board.grid = remaining;
+        board.gridDirty = true;
         board.flashRows = full.slice();
         board.flashTimer = 160;
         return full.length;
@@ -840,6 +958,7 @@
             board.grid.shift();
             board.grid.push(row);
         }
+        if (rows > 0) board.gridDirty = true;
         if (rows > 0 && board.current) {
             if (collides(board, board.current.matrix, board.current.x, board.current.y)) {
                 board.over = true;
@@ -908,6 +1027,7 @@
         board.current = null;
         board.trail.length = 0;
         board.canHold = true;
+        board.gridDirty = true;
 
         const cleared = clearLines(board);
         if (cleared > 0) {
@@ -949,6 +1069,7 @@
         while (board.arrTimer >= arr) {
             board.arrTimer -= arr;
             if (!movePiece(board, board.moveDir)) break;
+            state.renderAcc = IDLE_RENDER_INTERVAL;
             sfx("move");
         }
     }
@@ -1042,13 +1163,32 @@
         updateHud();
     }
 
+    function isIdleFrame() {
+        if (!state.game) return false;
+        for (const board of state.game.boards) {
+            if (board.particles.length || board.trail.length || board.heat >= 2 || board.flashTimer > 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     function loop(now) {
         const dt = Math.min(64, Math.max(0, now - state.lastFrame));
         state.lastFrame = now;
         if (state.game && !state.paused && !state.game.over) {
             update(dt);
         }
-        render();
+        if (isIdleFrame()) {
+            state.renderAcc += dt;
+            if (state.renderAcc >= IDLE_RENDER_INTERVAL) {
+                state.renderAcc = 0;
+                render();
+            }
+        } else {
+            state.renderAcc = 0;
+            render();
+        }
         state.raf = window.requestAnimationFrame(loop);
     }
 
@@ -1067,7 +1207,16 @@
         ctx.lineWidth = Math.max(1.5, size * 0.045);
 
         if (opts.ghost) {
-            ctx.setLineDash([size * 0.16, size * 0.12]);
+            ctx.setLineDash([size * 0.18, size * 0.12]);
+            ctx.globalAlpha = alpha * 0.5;
+            ctx.fillStyle = color;
+            ctx.fillRect(px + pad, py + pad, inner, inner);
+            ctx.globalAlpha = alpha;
+            ctx.lineWidth = Math.max(2, size * 0.07);
+            if (opts.glow) {
+                ctx.shadowColor = color;
+                ctx.shadowBlur = Math.min(18, size * 0.4);
+            }
             ctx.strokeRect(px + pad, py + pad, inner, inner);
             ctx.restore();
             return;
@@ -1131,12 +1280,21 @@
         }
     }
 
-    function renderBoard(board) {
-        const ctx = boardCtx[board.index];
-        if (!ctx) return;
-        const reduced = prefersReduced();
-        const heat = Math.min(board.heat, 4);
+    function ensureGridCache(board) {
+        const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+        if (!board.gridCanvas || board.gridDpr !== dpr) {
+            const canvas = document.createElement("canvas");
+            canvas.width = Math.round(BOARD_W * dpr);
+            canvas.height = Math.round(BOARD_H * dpr);
+            board.gridCanvas = canvas;
+            board.gridCtx = canvas.getContext("2d");
+            board.gridDpr = dpr;
+            board.gridDirty = true;
+        }
+        if (!board.gridDirty) return;
 
+        const ctx = board.gridCtx;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         ctx.clearRect(0, 0, BOARD_W, BOARD_H);
         ctx.fillStyle = "#0b0c0f";
         ctx.fillRect(0, 0, BOARD_W, BOARD_H);
@@ -1154,21 +1312,48 @@
         }
         ctx.stroke();
 
-        const flicker = heat >= 2 && !reduced
-            ? 0.7 + 0.3 * Math.abs(Math.sin(board.elapsed / 130))
-            : 1;
-
         for (let y = HIDDEN; y < TOTAL_ROWS; y += 1) {
-            const rowGlitch = heat >= 3 && !reduced && Math.sin(board.elapsed / 90 + y) > 0.97;
             for (let x = 0; x < COLS; x += 1) {
                 const cell = board.grid[y][x];
                 if (!cell) continue;
-                const isGarbage = cell === "garbage";
                 drawBlock(ctx, x * CELL, (y - HIDDEN) * CELL, CELL, COLORS[cell] || COLORS.garbage, {
-                    alpha: rowGlitch ? 0.35 : flicker,
-                    garbage: isGarbage,
+                    garbage: cell === "garbage",
                 });
             }
+        }
+        board.gridDirty = false;
+    }
+
+    function renderBoard(board) {
+        const ctx = boardCtx[board.index];
+        if (!ctx) return;
+        const reduced = prefersReduced();
+        const heat = Math.min(board.heat, 4);
+
+        ensureGridCache(board);
+        ctx.clearRect(0, 0, BOARD_W, BOARD_H);
+        ctx.drawImage(board.gridCanvas, 0, 0, BOARD_W, BOARD_H);
+
+        const flicker = heat >= 2 && !reduced
+            ? 0.7 + 0.3 * Math.abs(Math.sin(board.elapsed / 130))
+            : 1;
+        if (flicker < 1) {
+            ctx.save();
+            ctx.globalAlpha = 1 - flicker;
+            ctx.fillStyle = "#0b0c0f";
+            ctx.fillRect(0, 0, BOARD_W, BOARD_H);
+            ctx.restore();
+        }
+
+        if (heat >= 3 && !reduced) {
+            ctx.save();
+            ctx.fillStyle = "rgba(11, 12, 15, 0.65)";
+            for (let y = HIDDEN; y < TOTAL_ROWS; y += 1) {
+                if (Math.sin(board.elapsed / 90 + y) > 0.97) {
+                    ctx.fillRect(0, (y - HIDDEN) * CELL, BOARD_W, CELL);
+                }
+            }
+            ctx.restore();
         }
 
         for (const after of board.trail) {
@@ -1185,8 +1370,8 @@
                 x: board.current.x,
                 y: ghostY(board),
             };
-            const ghostAlpha = heat >= 3 ? 0.14 : 0.32;
-            drawMatrix(ctx, ghost, HIDDEN, CELL, ghostAlpha, { ghost: true });
+            const ghostAlpha = heat >= 3 ? 0.4 : 0.55;
+            drawMatrix(ctx, ghost, HIDDEN, CELL, ghostAlpha, { ghost: true, glow: true });
 
             if (heat >= 1 && !reduced) {
                 const offset = heat >= 3 ? 3 : 2;
@@ -1438,6 +1623,7 @@
     // Game lifecycle
     // ============================================================
     function startGame() {
+        if (state.capturingAction) cancelCapture();
         ensureAudio();
         const game = {
             mode: state.mode,
@@ -1478,6 +1664,7 @@
             : "Protocol started. " + PRESSURE[state.pressure].label + " pressure.");
 
         state.lastFrame = performance.now();
+        state.renderAcc = 0;
         window.cancelAnimationFrame(state.raf);
         state.raf = window.requestAnimationFrame(loop);
     }
@@ -1487,6 +1674,7 @@
         state.raf = 0;
         state.game = null;
         state.paused = false;
+        if (state.capturingAction) cancelCapture();
         hideOverlays();
         renderRecords();
         showScreen("lobby");
@@ -1557,32 +1745,28 @@
     // ============================================================
     // Input
     // ============================================================
-    function mapKey(key, duo) {
-        const lower = key.length === 1 ? key.toLowerCase() : key;
+    function mapKey(code, duo) {
+        const binds = state.settings.binds || DEFAULT_BINDS;
+        for (const action of Object.keys(DEFAULT_BINDS)) {
+            if (code === binds[action]) return { player: 0, action };
+        }
+        // Layout-stable accessibility fallbacks.
+        if (code === "KeyZ") return { player: 0, action: "ccw" };
+        if (code === "ShiftLeft" || code === "ShiftRight") return { player: 0, action: "hold" };
         if (!duo) {
-            if (lower === "a" || lower === "ArrowLeft") return { player: 0, action: "left" };
-            if (lower === "d" || lower === "ArrowRight") return { player: 0, action: "right" };
-            if (lower === "s" || lower === "ArrowDown") return { player: 0, action: "soft" };
-            if (lower === "w" || lower === "ArrowUp") return { player: 0, action: "cw" };
-            if (lower === "q" || lower === "z") return { player: 0, action: "ccw" };
-            if (lower === "c" || lower === "Shift") return { player: 0, action: "hold" };
-            if (key === " ") return { player: 0, action: "drop" };
+            if (code === "ArrowLeft") return { player: 0, action: "left" };
+            if (code === "ArrowRight") return { player: 0, action: "right" };
+            if (code === "ArrowDown") return { player: 0, action: "soft" };
+            if (code === "ArrowUp") return { player: 0, action: "cw" };
             return null;
         }
-        if (lower === "a") return { player: 0, action: "left" };
-        if (lower === "d") return { player: 0, action: "right" };
-        if (lower === "s") return { player: 0, action: "soft" };
-        if (lower === "w") return { player: 0, action: "cw" };
-        if (lower === "q" || lower === "z") return { player: 0, action: "ccw" };
-        if (lower === "c" || lower === "Shift") return { player: 0, action: "hold" };
-        if (key === " ") return { player: 0, action: "drop" };
-        if (key === "ArrowLeft") return { player: 1, action: "left" };
-        if (key === "ArrowRight") return { player: 1, action: "right" };
-        if (key === "ArrowDown") return { player: 1, action: "soft" };
-        if (key === "ArrowUp") return { player: 1, action: "cw" };
-        if (key === ",") return { player: 1, action: "ccw" };
-        if (key === ".") return { player: 1, action: "hold" };
-        if (key === "Enter") return { player: 1, action: "drop" };
+        if (code === "ArrowLeft") return { player: 1, action: "left" };
+        if (code === "ArrowRight") return { player: 1, action: "right" };
+        if (code === "ArrowDown") return { player: 1, action: "soft" };
+        if (code === "ArrowUp") return { player: 1, action: "cw" };
+        if (code === "Comma") return { player: 1, action: "ccw" };
+        if (code === "Period") return { player: 1, action: "hold" };
+        if (code === "Enter") return { player: 1, action: "drop" };
         return null;
     }
 
@@ -1590,6 +1774,7 @@
         if (!state.game || state.game.over || state.paused) return;
         const board = state.game.boards[player];
         if (!board || board.over) return;
+        state.renderAcc = IDLE_RENDER_INTERVAL;
         if (action === "left") {
             if (down) startMove(board, -1);
             else stopMove(board, -1);
@@ -1613,7 +1798,42 @@
     }
 
     function onKeyDown(event) {
-        ensureAudio();
+        if (state.capturingAction) {
+            event.preventDefault();
+            event.stopPropagation();
+            if (event.repeat) return;
+            if (event.code === "Escape") {
+                cancelCapture();
+                announce("Key bind cancelled.");
+                return;
+            }
+            if (!event.code || RESERVED_CODES.has(event.code)) {
+                setBindWarning("That key is reserved. Choose another key.");
+                return;
+            }
+            const action = state.capturingAction;
+            const conflict = BIND_ACTIONS.find(
+                (item) => item.key !== action && state.settings.binds[item.key] === event.code
+            );
+            if (conflict) {
+                setBindWarning(
+                    keyLabel(event.code) + " is already bound to " + conflict.label +
+                    ". Pick another key, or rebind that action first."
+                );
+                return;
+            }
+            state.settings.binds[action] = event.code;
+            state.capturingAction = null;
+            saveSettings();
+            setBindWarning("");
+            renderBinds();
+            const button = dom.bindGrid && dom.bindGrid.querySelector('[data-action="' + action + '"]');
+            if (button) button.focus();
+            announce(action + " bound to " + keyLabel(event.code) + ".");
+            return;
+        }
+
+        resumeAudio();
         if (state.screen === "lobby") {
             if (event.key === "Enter") {
                 const tag = event.target && event.target.tagName;
@@ -1632,7 +1852,7 @@
         if (state.paused || !state.game || state.game.over) return;
 
         const duo = state.game.mode === "duo";
-        const mapping = mapKey(event.key, duo);
+        const mapping = mapKey(event.code, duo);
         if (!mapping) return;
         event.preventDefault();
         if (event.repeat) return;
@@ -1640,9 +1860,10 @@
     }
 
     function onKeyUp(event) {
+        if (state.capturingAction) return;
         if (state.screen !== "match" || !state.game) return;
         const duo = state.game.mode === "duo";
-        const mapping = mapKey(event.key, duo);
+        const mapping = mapKey(event.code, duo);
         if (!mapping) return;
         performAction(mapping.player, mapping.action, false);
     }
@@ -1711,7 +1932,7 @@
                 const action = button.dataset.action;
                 const down = (event) => {
                     event.preventDefault();
-                    ensureAudio();
+                    resumeAudio();
                     performAction(player, action, true);
                 };
                 const up = (event) => {
@@ -1783,6 +2004,7 @@
         updateMuteButtons();
         updateEffectsUI();
         ensurePips();
+        renderBinds();
         renderRecords();
         wireEvents();
         showScreen("lobby");

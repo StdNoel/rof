@@ -437,6 +437,74 @@ kbd {
     box-shadow: 0 0 10px var(--accent);
 }
 
+.bind-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 4px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.28);
+}
+
+.bind-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 44px;
+    padding: 4px 8px 4px 10px;
+    border-radius: 7px;
+}
+
+.bind-label {
+    font-size: 0.74rem;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+}
+
+.bind-key {
+    min-width: 88px;
+    min-height: 44px;
+    padding: 8px 12px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: rgba(255, 255, 255, 0.035);
+    color: var(--text);
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.bind-key:hover {
+    border-color: var(--line-strong);
+}
+
+.bind-key.capturing {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-soft);
+    box-shadow: 0 0 16px rgba(191, 0, 255, 0.25);
+}
+
+.bind-hint {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.66rem;
+    line-height: 1.4;
+}
+
+.bind-warning {
+    margin: 0;
+    color: var(--danger);
+    font-size: 0.68rem;
+    line-height: 1.4;
+}
+
+.bind-warning:empty {
+    display: none;
+}
+
 .primary,
 .ghost {
     border-radius: 11px;

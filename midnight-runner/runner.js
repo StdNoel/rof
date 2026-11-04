@@ -328,22 +328,39 @@
         const transition = y > START_ROW && y % CHUNK_ROWS === 0;
 
         if (!transition) {
+            // Open each pillar independently, then guarantee the chunk lane and
+            // one extra lane so the player can always weave between two routes.
             for (let b = 0; b < LANE_BLOCKS; b++) {
                 const start = 1 + b * 3;
-                walls[start] = true;
-                if (b !== laneBlock && g.rng() < 0.14) walls[start] = false;
+                walls[start] = g.rng() >= 0.45;
+            }
+            walls[1 + laneBlock * 3] = false;
+
+            let openLanes = 0;
+            for (let b = 0; b < LANE_BLOCKS; b++) {
+                if (!walls[1 + b * 3]) openLanes += 1;
+            }
+            let extraLane = -1;
+            if (openLanes < 2) {
+                let extra = Math.floor(g.rng() * LANE_BLOCKS);
+                while (extra === laneBlock || !walls[1 + extra * 3]) {
+                    extra = (extra + 1) % LANE_BLOCKS;
+                }
+                walls[1 + extra * 3] = false;
+                extraLane = extra;
             }
             walls[COLS - 2] = true;
 
-            if (y > START_ROW && g.rng() < 0.34) {
+            // Clutter only on closed, non-lane blocks; never on guaranteed-open lanes.
+            if (y > START_ROW && g.rng() < 0.22) {
+                const closed = [];
                 for (let b = 0; b < LANE_BLOCKS; b++) {
-                    if (b === laneBlock) continue;
-                    if (g.rng() < 0.5) {
-                        const s = 1 + b * 3;
-                        walls[s] = true;
-                        walls[s + 1] = true;
-                        walls[s + 2] = true;
-                    }
+                    if (b !== laneBlock && b !== extraLane && walls[1 + b * 3]) closed.push(b);
+                }
+                if (closed.length > 0) {
+                    const b = closed[Math.floor(g.rng() * closed.length)];
+                    const s = 1 + b * 3;
+                    walls[s + (g.rng() < 0.5 ? 1 : 2)] = true;
                 }
             }
         }
