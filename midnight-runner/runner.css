@@ -570,6 +570,21 @@ kbd {
     white-space: nowrap;
 }
 
+.boost-label.boosting {
+    color: var(--char);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-shadow: 0 0 10px var(--char-soft);
+    width: auto;
+    min-width: 74px;
+    text-align: right;
+}
+
+.boost-track.draining .boost-fill {
+    background: linear-gradient(90deg, #ffffff 0%, var(--char) 100%);
+    box-shadow: 0 0 20px var(--char);
+}
+
 .boost-track.ready {
     animation: ready-pulse 0.9s ease-in-out infinite;
 }

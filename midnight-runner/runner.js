@@ -945,7 +945,7 @@
     }
 
     function addGauge(g, amount) {
-        if (g.boost > 0 && amount < 20) return;
+        if (g.boost > 0) return;
         g.gauge = clamp(g.gauge + amount, 0, 100);
     }
 
@@ -1488,10 +1488,16 @@
             }
             hudCache.hp = g.hp;
         }
-        const gauge = Math.round(g.gauge);
-        if (gauge !== hudCache.gauge) {
-            dom.boostFill.style.width = gauge + "%";
-            hudCache.gauge = gauge;
+        let fillPct;
+        if (g.boost > 0) {
+            const cfg = CHARACTERS[g.character];
+            fillPct = Math.round((g.boost / cfg.duration) * 100);
+        } else {
+            fillPct = Math.round(g.gauge);
+        }
+        if (fillPct !== hudCache.gauge) {
+            dom.boostFill.style.width = fillPct + "%";
+            hudCache.gauge = fillPct;
         }
         let label;
         if (g.boost > 0) {
@@ -1506,6 +1512,8 @@
             hudCache.label = label;
         }
         dom.boostTrack.classList.toggle("ready", g.gauge >= 100 && g.boost <= 0);
+        dom.boostLabel.classList.toggle("boosting", g.boost > 0);
+        dom.boostTrack.classList.toggle("draining", g.boost > 0);
     }
 
     function updateLobby() {
