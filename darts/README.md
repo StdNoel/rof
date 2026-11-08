@@ -33,6 +33,11 @@ horizontal and vertical precision-timing bars. On touch screens, drag the
 reticle into place and lift your finger to lock it, then tap once for each
 timing bar.
 
+### Timing step
+
+Every throw is aim → lock → stop the horizontal timing bar → stop the vertical
+timing bar. Click / tap / `Space` / `Enter` advances each stage.
+
 If the pointer is away from the board and no keyboard aim is active, the
 reticle is hidden and throws are ignored. The page does not scroll or zoom
 while you are aiming on the board.
@@ -80,18 +85,19 @@ Sectors run clockwise from the top: 20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19,
 Each drink raises a player's drunk level. It affects both the human's screen
 and the accuracy of every player. The bot gets drunk too.
 
-| Drinks | Label | Aim error | Board blur | Timing |
-|:---:|---|---|---|---|
-| 0 | Sober | 0.018R | none | 1.15 s |
-| 1 | Tipsy | 0.028R | 1 px | 0.99 s |
-| 2 | Buzzed | 0.045R | 2 px | 0.85 s |
-| 3 | Wasted | 0.070R | 5 px | 0.73 s |
-| 4 | Seeing Double | 0.100R | 7 px | 0.63 s |
-| 5 | Blackout | match over | — | — |
+| Drinks | Label | Aim error | Board blur |
+|:---:|---|---|---|
+| 0 | Sober | 0.018R | none |
+| 1 | Tipsy | 0.028R | 1 px |
+| 2 | Buzzed | 0.045R | 2 px |
+| 3 | Wasted | 0.070R | 5 px |
+| 4 | Seeing Double | 0.100R | 7 px |
+| 5 | Blackout | match over | — |
 
 `R` is the board radius. A random "big slip" can add an extra 0.05R–0.12R of
 error, with a higher chance at higher levels. The board also sways, and from
-the third drink onward shows afterimages. Timing periods are approximate.
+the third drink onward shows afterimages. Timing period = max(500 ms, 1150 ms ×
+0.86^drinks).
 
 Blur is applied as a layer over the board, so the aim reticle stays sharp and
 interactive. From the third drink onward the board blur deepens and the

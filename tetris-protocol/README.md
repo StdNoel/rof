@@ -36,9 +36,9 @@ on-screen pad, and the match HUD includes a pause button.
 Player 1 / Solo binds are remappable from the lobby. Select a key in the
 **Key binds** field, then press the replacement key. Bindings use physical key
 codes, so they stay stable across keyboard layouts. `Escape` cancels capture,
-and reserved keys (`Escape`, `Enter`, arrows, `,`, `.`, `Tab`, `Space`, and
-modifier keys) are rejected with an inline warning so local VS Player 2
-controls keep working. A key already assigned to another action is also
+and reserved keys (`Escape`, `Enter`, `Tab`, `Space`, arrows, `,`, `.`,
+`CapsLock`, and modifier keys) are rejected with an inline warning so local VS
+Player 2 controls keep working. A key already assigned to another action is also
 rejected with an inline warning, and capture stays open so you can try again.
 `Z` and `Shift` remain accessibility fallbacks for rotate CCW and
 hold; arrow keys remain a fallback in solo.
@@ -79,7 +79,7 @@ corruption rows start appearing.
 
 - All line clears are multiplied by `(heat + 1)`.
 - Soft drop: +1 per cell. Hard drop: +2 per cell.
-- Combo bonus: `50 × combo × (heat + 1)`.
+- Combo bonus: `50 × (combo − 1) × (heat + 1)`.
 - Best score, best lines, and max heat are stored for solo runs.
 
 ## Heat

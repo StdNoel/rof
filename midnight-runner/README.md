@@ -21,12 +21,14 @@ python -m http.server 8000
 | Mobile boost | On-screen button (Manual mode) |
 | Mobile pause | Pause button in the game HUD |
 
+Fast direction taps are buffered (up to two), and mid-tile reversals are instant.
+
 ## Characters
 
 | Character | Color | Boost |
 |---|---|---|
 | Vela | Cyan | 6.5 s immunity, +8% movement speed |
-| Rho | Magenta | 5 s immunity, periodic shockwaves clear nearby enemies and projectiles |
+| Rho | Magenta | 5 s immunity, periodic shockwaves clear nearby enemies and projectiles. The shockwave is drawn from the same function that tests collisions, so the ring is exactly the hitbox. |
 | Sol | Amber | 5 s immunity, magnetizes nearby pickups |
 
 ## Rules
@@ -34,6 +36,7 @@ python -m http.server 8000
 - Every generated row keeps at least two open lanes with frequent cross-connections, plus occasional single-cell clutter, so you can weave around hazards instead of being funneled down one corridor.
 - 3 HP. Enemy, hazard, and projectile contact costs 1 HP and grants 1.2 s of invulnerability.
 - Coins, chests, and heal pickups spawn on open floor. Coins and chests fill the boost gauge.
+- Boost pickups extend the active boost instead of filling the gauge. The gauge shows remaining boost time while boosting.
 - Boost makes you immune to enemies, hazards, and projectiles, and destroys enemies on contact. Walls still block. The collapse is always lethal.
 - After a 12-second grace period, the collapse rises from behind and accelerates over time.
 - Score comes from distance plus pickups and boost kills. Best scores are saved per character.
@@ -42,7 +45,7 @@ python -m http.server 8000
 
 Open the gear button from the lobby or during a run. Settings pause an active run.
 
-- Boost mode: Auto triggers at a full gauge; Manual holds at 100% until the boost key or touch button is pressed.
+- Boost mode: Auto fires at a full gauge; Manual holds at 100% until the boost key or touch button is pressed. Pickups during a boost extend it (up to 1.5× the base duration).
 - Manual boost key: click the key field, then press a letter or number key. Movement keys, browser shortcuts, and modifier combos are rejected with a warning.
 - Reduced effects cuts particles, screen shake, and pulsing animations.
 
