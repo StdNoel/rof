@@ -229,8 +229,15 @@ kbd {
         0 0 34px rgba(46, 230, 255, 0.25);
 }
 
-.lobby-title span.lobby-title-highlight {
-    color: var(--danger);
+.lobby-title span.lobby-title-yellow {
+    color: rgba(255, 178, 62, 1);
+    text-shadow:
+        0 0 10px rgba(255, 178, 62, 0.55),
+        0 0 34px rgba(255, 178, 62, 0.25);
+}
+
+.lobby-title span.lobby-title-red {
+    color: rgba(255, 69, 207, 1);
     text-shadow:
         0 0 10px rgba(255, 69, 207, 0.55),
         0 0 34px rgba(255, 69, 207, 0.25);

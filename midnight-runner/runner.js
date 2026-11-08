@@ -34,6 +34,8 @@
         right: { x: 1, y: 0 },
     };
 
+    const OPPOSITE = { up: "down", down: "up", left: "right", right: "left" };
+
     const CHARACTERS = {
         vela: { id: "vela", name: "Vela", color: "#2ee6ff", duration: 6.5, speed: 1.08 },
         rho: { id: "rho", name: "Rho", color: "#ff45cf", duration: 5, speed: 1 },
@@ -479,7 +481,7 @@
                 y: START_ROW,
                 progress: 0,
                 dir: null,
-                queued: "up",
+                queued: ["up"],
                 speed: PLAYER_SPEED * cfg.speed,
                 facing: "up",
             },
@@ -621,11 +623,27 @@
     }
 
     function chooseDir(g, p) {
-        if (p.queued && canMove(g, p.tx, p.ty, p.queued)) {
-            const dir = p.queued;
-            p.queued = null;
-            return dir;
+        // Drop queued entries that are illegal from here AND from the next cell
+        // along the current heading (they can never fire).
+        while (p.queued.length > 0) {
+            const dir = p.queued[0];
+            if (canMove(g, p.tx, p.ty, dir)) break;
+            if (p.dir) {
+                const v = DIRECTIONS[p.dir];
+                if (canMove(g, p.tx + v.x, p.ty + v.y, dir)) break; // legal next tile
+            }
+            p.queued.shift(); // provably dead, discard
         }
+
+        if (p.queued.length > 0) {
+            const dir = p.queued[0];
+            if (canMove(g, p.tx, p.ty, dir)) {
+                p.queued.shift();
+                return dir;
+            }
+            // legal only from the next tile — keep it, keep current direction here
+        }
+
         if (p.dir && canMove(g, p.tx, p.ty, p.dir)) return p.dir;
         return null;
     }
@@ -636,6 +654,19 @@
         let guard = 0;
 
         while (budget > 0.00001 && guard++ < 12) {
+            // Instant reversal: if mid-tile and the newest intent is backwards.
+            if (p.dir && p.progress > 0 && p.queued.length &&
+                p.queued[p.queued.length - 1] === OPPOSITE[p.dir]) {
+                const v = DIRECTIONS[p.dir];
+                p.queued.pop();
+                p.tx += v.x;
+                p.ty += v.y;              // we were heading into this tile
+                p.progress = 1 - p.progress;
+                p.dir = OPPOSITE[p.dir];
+                p.facing = p.dir;
+                continue;
+            }
+
             if (!p.dir) {
                 p.dir = chooseDir(g, p);
                 if (!p.dir) break;
@@ -945,7 +976,13 @@
     }
 
     function addGauge(g, amount) {
-        if (g.boost > 0) return;
+        if (g.boost > 0) {
+            const cfg = CHARACTERS[g.character];
+            const extra = (amount / 100) * cfg.duration;
+            const cap = cfg.duration * 1.5;          // optional ceiling
+            g.boost = Math.min(cap, g.boost + extra);
+            return;
+        }
         g.gauge = clamp(g.gauge + amount, 0, 100);
     }
 
@@ -956,14 +993,52 @@
         spawnBurst(g, e.x, e.y, enemyColor(e.kind), 14, 4.5);
     }
 
+    // Local frame: +x = right of facing, +y = forward (facing direction).
+    // This is THE definition of Rho's egg shape. Both the hit test and the
+    // renderer must derive from this.
+    function eggInside(lx, ly, radius) {
+        const frontStretch = 1.6;
+        const rearSquash   = 0.7;
+
+        // Invert the shape along the facing axis. Everything downstream
+        // (inEgg, shockwave, drawWaves) sees the flipped shape, so hitbox
+        // and outline stay locked together.
+        ly = -ly;
+
+        if (ly >= 0) {
+            // Front half: rounded apex (half-ellipse)
+            const extent = radius * frontStretch;
+            if (ly > extent) return false;
+            const t = ly / extent;
+            const hw = radius * Math.sqrt(1 - t * t);
+            return Math.abs(lx) <= hw;
+        } else {
+            // Rear half: pointed apex (quadratic taper)
+            const extent = radius * rearSquash;
+            if (-ly > extent) return false;
+            const t = -ly / extent;
+            const hw = radius * (1 - t * t);
+            return Math.abs(lx) <= hw;
+        }
+    }
+
+    function inEgg(x, y, p, radius) {
+        const f = DIRECTIONS[p.facing] || DIRECTIONS.up;
+        const dx = x - p.x;
+        const dy = y - p.y;
+        const ly = dx * f.x + dy * f.y;         // forward component
+        const lx = dx * f.y - dy * f.x;         // right component
+        return eggInside(lx, ly, radius);
+    }
+
     function shockwave(g) {
         const p = g.player;
         const radius = 3.2;
-        g.waves.push({ x: p.x, y: p.y, age: 0, max: 0.5 });
+        g.waves.push({ x: p.x, y: p.y, age: 0, max: 0.5, facing: p.facing });
         for (const e of g.entities) {
             if (e.dead) continue;
             if (e.type !== "enemy" && e.type !== "proj") continue;
-            if (Math.hypot(e.x - p.x, e.y - p.y) <= radius) {
+            if (inEgg(e.x, e.y, p, radius)) {
                 if (e.type === "enemy") {
                     killEnemy(g, e);
                 } else {
@@ -1322,16 +1397,55 @@
     function drawWaves(g, camRow) {
         for (const wave of g.waves) {
             const t = wave.age / wave.max;
-            const radius = (0.6 + t * 3) * TILE;
+            const scale = 0.6 + t * 3;
+            const radius = scale * TILE;
             const cx = centerX(wave.x);
             const cy = centerY(wave.y, camRow);
-            if (cx + radius < 0 || cx - radius > VIEW_W ||
-                cy + radius < 0 || cy - radius > VIEW_H) continue;
+            // Bounding radius uses the larger lobe extent.
+            const maxR = radius * 1.6;
+            if (cx + maxR < 0 || cx - maxR > VIEW_W ||
+                cy + maxR < 0 || cy - maxR > VIEW_H) continue;
+
+            const f = DIRECTIONS[wave.facing] || DIRECTIONS.up;
+            const sfx = f.x;
+            const sfy = -f.y;                    // world +y is screen -y
+            const angle = Math.atan2(sfy, sfx) - Math.PI / 2;
+
+            // Binary-search the boundary distance along a unit local direction.
+            const boundaryAt = (ux, uy) => {
+                let lo = 0;
+                let hi = maxR;
+                for (let i = 0; i < 18; i++) {
+                    const mid = (lo + hi) * 0.5;
+                    if (eggInside(ux * mid, uy * mid, radius)) lo = mid;
+                    else hi = mid;
+                }
+                return lo;
+            };
+
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.rotate(angle);
             ctx.strokeStyle = hexToRgba(CHARACTERS[g.character].color, (1 - t) * 0.6);
             ctx.lineWidth = 2.5;
             ctx.beginPath();
-            ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+
+            const N = 64;
+            for (let i = 0; i <= N; i++) {
+                const a = (i / N) * Math.PI * 2;
+                const ux = Math.cos(a);
+                const uy = Math.sin(a);
+                const r = boundaryAt(ux, uy);
+                // local +y = forward; canvas -y is up, so negate the y-component
+                const px = ux * r;
+                const py = -uy * r;
+                if (i === 0) ctx.moveTo(px, py);
+                else ctx.lineTo(px, py);
+            }
+
+            ctx.closePath();
             ctx.stroke();
+            ctx.restore();
         }
     }
 
@@ -1491,7 +1605,7 @@
         let fillPct;
         if (g.boost > 0) {
             const cfg = CHARACTERS[g.character];
-            fillPct = Math.round((g.boost / cfg.duration) * 100);
+            fillPct = Math.min(100, Math.round((g.boost / cfg.duration) * 100));
         } else {
             fillPct = Math.round(g.gauge);
         }
@@ -1718,7 +1832,9 @@
 
     function queueDirection(g, dir) {
         if (!g || !g.active || g.over) return;
-        g.player.queued = dir;
+        const q = g.player.queued;
+        if (q.length >= 2) q.shift();   // keep last two intents
+        q.push(dir);
     }
 
     function handleCapture(e) {
@@ -1806,7 +1922,7 @@
 
         const move = MOVE_KEYS[e.code];
         if (move) {
-            queueDirection(game, move);
+            if (!e.repeat) queueDirection(game, move);
             return;
         }
 
