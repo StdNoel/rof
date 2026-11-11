@@ -1,3 +1,14 @@
+import type { Fact, InterludeItem, Question, SecretFragment } from "./types";
+
+// ============================================================
+// DOM helper
+// ============================================================
+function byId<T extends HTMLElement = HTMLElement>(id: string): T {
+    const el = document.getElementById(id);
+    if (!el) throw new Error(`Missing element #${id}`);
+    return el as T;
+}
+
 // ============================================================
 // State
 // ============================================================
@@ -12,9 +23,39 @@ const MAX_LEVEL = 9;
 const MAX_SCORE = 100;
 const SCORE_ACCURACY_WEIGHT = 0.8;
 const SCORE_SPEED_WEIGHT = 0.2;
-const NOTE_LEVELS = [6, 7, 8, 9, 10, 11, 12, 13];
+const NOTE_LEVELS = [6, 7, 8, 9];
 
-const state = {
+interface QuizState {
+    score: number;
+    level: number;
+    hearts: number;
+    currentQuestion: Question | null;
+    answered: boolean;
+    unlockedFactIds: string[];
+    unlockedSecretIds: string[];
+    facts: Fact[];
+    secrets: SecretFragment[];
+    questions: Question[];
+    sessionNotesOrder: string[];
+    pendingInterlude: InterludeItem[];
+
+    // Guards
+    sessionActive: boolean;
+    interludeBusy: boolean;
+    jumpscareInProgress: boolean;
+
+    // Timer
+    timerId: ReturnType<typeof setTimeout> | null;
+    timerStart: number;
+    timerDurationMs: number;
+    timerStartRemainingMs: number;
+    timerPaused: boolean;
+    timerRemainingMs: number;
+    warnTimeoutId: ReturnType<typeof setTimeout> | null;
+    timerTickerId: ReturnType<typeof setInterval> | null;
+}
+
+const state: QuizState = {
     score: 0,
     level: 1,
     hearts: MAX_HEARTS,
@@ -49,24 +90,31 @@ const state = {
 // Score, level, and hearts are session-only.
 // ============================================================
 function saveProgress() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        unlockedFactIds: state.unlockedFactIds,
-        unlockedSecretIds: state.unlockedSecretIds,
-    }));
+    localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+            unlockedFactIds: state.unlockedFactIds,
+            unlockedSecretIds: state.unlockedSecretIds,
+        }),
+    );
 }
 
 function loadProgress() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return;
     try {
-        const data = JSON.parse(raw);
+        const data = JSON.parse(raw) as Partial<{
+            unlockedFactIds: string[];
+            unlockedSecretIds: string[];
+        }>;
         state.unlockedFactIds = data.unlockedFactIds ?? [];
         state.unlockedSecretIds = data.unlockedSecretIds ?? [];
-    } catch { }
+    } catch {}
 }
 
 function resetProgress() {
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(LAST_QUESTION_KEY);
     state.score = 0;
     state.level = 1;
     state.hearts = MAX_HEARTS;
@@ -77,37 +125,45 @@ function resetProgress() {
     state.pendingInterlude = [];
     state.sessionActive = false;
     state.interludeBusy = false;
+    updateScoreDisplay();
+    setTimerReadoutText("--");
 }
 
 // ============================================================
 // Shuffle helpers
 // ============================================================
-function shuffleArray(arr) {
+function shuffleArray<T>(arr: T[]): T[] {
     for (let i = arr.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
-        [arr[i], arr[j]] = [arr[j], arr[i]];
+        [arr[i], arr[j]] = [arr[j]!, arr[i]!];
     }
     return arr;
 }
 
-function shuffleQuestions() {
+function shuffleQuestions(): void {
     if (state.questions.length === 0) return;
     shuffleArray(state.questions);
 
     // Ensure this run's first question differs from the previous run's.
     const lastFirst = localStorage.getItem(LAST_QUESTION_KEY);
-    if (lastFirst && state.questions.length > 1 && state.questions[0].id === lastFirst) {
-        state.questions.push(state.questions.shift());
+    if (
+        lastFirst &&
+        state.questions.length > 1 &&
+        state.questions[0]!.id === lastFirst
+    ) {
+        state.questions.push(state.questions.shift()!);
     }
-    localStorage.setItem(LAST_QUESTION_KEY, state.questions[0].id);
+    localStorage.setItem(LAST_QUESTION_KEY, state.questions[0]!.id);
 }
 
 // ============================================================
 // Screen navigation
 // ============================================================
-function showScreen(name) {
-    document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
-    document.getElementById("screen-" + name).classList.add("active");
+function showScreen(name: string): void {
+    document
+        .querySelectorAll(".screen")
+        .forEach((s) => s.classList.remove("active"));
+    byId("screen-" + name).classList.add("active");
 
     if (name === "facts") renderFacts();
 
@@ -123,15 +179,15 @@ function showScreen(name) {
 // ============================================================
 // Responsive scroll helpers
 // ============================================================
-function prefersReducedMotion() {
+function prefersReducedMotion(): boolean {
     return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
-function isMobileLayout() {
+function isMobileLayout(): boolean {
     return window.matchMedia("(max-width: 700px)").matches;
 }
 
-function scrollToTop() {
+function scrollToTop(): void {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
 }
 
@@ -139,14 +195,14 @@ function scrollToTop() {
 // On iOS, overflow:hidden alone doesn't stop the page from moving.
 let modalScrollY = 0;
 
-function lockBodyScroll() {
+function lockBodyScroll(): void {
     if (document.body.classList.contains("modal-open")) return;
     modalScrollY = window.scrollY || document.documentElement.scrollTop || 0;
     document.body.style.top = `-${modalScrollY}px`;
     document.body.classList.add("modal-open");
 }
 
-function unlockBodyScroll() {
+function unlockBodyScroll(): void {
     if (!document.body.classList.contains("modal-open")) return;
     document.body.classList.remove("modal-open");
     document.body.style.top = "";
@@ -155,10 +211,10 @@ function unlockBodyScroll() {
 
 // After answering, make sure the feedback and Next button are reachable.
 // Only scroll when they are off-screen so desktop play is unaffected.
-function revealNextAction() {
+function revealNextAction(): void {
     if (!isMobileLayout()) return;
 
-    const next = document.getElementById("btn-next");
+    const next = byId("btn-next");
     if (next.classList.contains("hidden")) return;
 
     const vv = window.visualViewport;
@@ -175,10 +231,11 @@ function revealNextAction() {
     });
 }
 
-document.querySelectorAll("[data-goto]").forEach(btn => {
+document.querySelectorAll<HTMLElement>("[data-goto]").forEach((btn) => {
     btn.addEventListener("click", () => {
         if (state.jumpscareInProgress) return;
         const target = btn.dataset.goto;
+        if (!target) return;
 
         if (target === "minigame") {
             window.location.href = "minigames/";
@@ -202,7 +259,7 @@ document.querySelectorAll("[data-goto]").forEach(btn => {
     });
 });
 
-document.getElementById("btn-reset-progress").addEventListener("click", () => {
+byId("btn-reset-progress").addEventListener("click", () => {
     if (confirm("Reset all progress?")) {
         resetProgress();
         updateFactsBadge();
@@ -214,38 +271,66 @@ document.getElementById("btn-reset-progress").addEventListener("click", () => {
 // ============================================================
 // Load data
 // ============================================================
-async function loadData() {
-    const questionPromises = QUESTION_SETS.map(async n => {
+async function loadData(): Promise<void> {
+    const questionPromises = QUESTION_SETS.map(async (n) => {
         try {
             const res = await fetch(`data/questions_${n}.json`);
             if (!res.ok) {
-                console.warn(`Skipping missing question set: questions_${n}.json`);
-                return [];
+                console.warn(
+                    `Skipping missing question set: questions_${n}.json`,
+                );
+                return [] as Question[];
             }
-            const json = await res.json();
+            const json = (await res.json()) as { questions?: Question[] };
             return json.questions ?? [];
         } catch (err) {
             console.warn(`Failed to load questions_${n}.json`, err);
-            return [];
+            return [] as Question[];
         }
     });
 
-    const [factRes, secretsRes] = await Promise.all([
-        fetch("data/facts.json"),
-        fetch("data/secrets.json"),
+    const [facts, secrets] = await Promise.all([
+        (async (): Promise<Fact[]> => {
+            try {
+                const res = await fetch("data/facts.json");
+                if (!res.ok) {
+                    console.warn("Skipping missing facts: facts.json");
+                    return [];
+                }
+                return ((await res.json()) as { facts?: Fact[] }).facts ?? [];
+            } catch (err) {
+                console.warn("Failed to load facts.json", err);
+                return [];
+            }
+        })(),
+        (async (): Promise<SecretFragment[]> => {
+            try {
+                const res = await fetch("data/secrets.json");
+                if (!res.ok) {
+                    console.warn("Skipping missing secrets: secrets.json");
+                    return [];
+                }
+                return (
+                    ((await res.json()) as { fragments?: SecretFragment[] })
+                        .fragments ?? []
+                );
+            } catch (err) {
+                console.warn("Failed to load secrets.json", err);
+                return [];
+            }
+        })(),
     ]);
 
     const questionArrays = await Promise.all(questionPromises);
     state.questions = questionArrays.flat();
-
-    state.facts = (await factRes.json()).facts ?? [];
-    state.secrets = (await secretsRes.json()).fragments ?? [];
+    state.facts = facts;
+    state.secrets = secrets;
 }
 
 // ============================================================
 // Session lifecycle
 // ============================================================
-function startSession() {
+function startSession(): void {
     // Fresh run
     state.score = 0;
     state.level = 1;
@@ -260,8 +345,8 @@ function startSession() {
 
     // Prepare this run's note order (all notes not yet unlocked, shuffled).
     state.sessionNotesOrder = state.secrets
-        .filter(s => !state.unlockedSecretIds.includes(s.id))
-        .map(s => s.id);
+        .filter((s) => !state.unlockedSecretIds.includes(s.id))
+        .map((s) => s.id);
     shuffleArray(state.sessionNotesOrder);
 
     updateHearts();
@@ -270,13 +355,13 @@ function startSession() {
     startLevel();
 }
 
-function endSession() {
+function endSession(): void {
     state.answered = false;
     state.sessionActive = false;
 
     const finalScore = Math.round(Math.min(MAX_SCORE, state.score));
-    document.getElementById("game-complete-score").textContent = `${finalScore} / ${MAX_SCORE}`;
-    const overlay = document.getElementById("game-complete");
+    byId("game-complete-score").textContent = `${finalScore} / ${MAX_SCORE}`;
+    const overlay = byId("game-complete");
     overlay.classList.remove("hidden");
     clearTimer();
     setTimerReadoutText("--");
@@ -288,12 +373,12 @@ function endSession() {
     overlay.focus({ preventScroll: true });
 }
 
-function hideGameComplete() {
-    document.getElementById("game-complete").classList.add("hidden");
+function hideGameComplete(): void {
+    byId("game-complete").classList.add("hidden");
     unlockBodyScroll();
 }
 
-document.getElementById("game-complete-return").addEventListener("click", () => {
+byId("game-complete-return").addEventListener("click", () => {
     hideGameComplete();
     state.score = 0;
     state.level = 1;
@@ -307,36 +392,58 @@ document.getElementById("game-complete-return").addEventListener("click", () => 
 // ============================================================
 // Question selection
 // ============================================================
-function pickQuestionForLevel(level) {
+function pickQuestionForLevel(level: number): Question | null {
     if (state.questions.length === 0) return null;
     const index = (level - 1) % state.questions.length;
-    return state.questions[index];
+    return state.questions[index] ?? null;
 }
 
 // ============================================================
 // Helpers
 // ============================================================
-function labelFor(i) {
+function labelFor(i: number): string {
     return String.fromCharCode(65 + i);
 }
 
-function colsFor(n) {
+function colsFor(n: number): number {
     if (n <= 1) return 1;
     if (n === 2) return 2;
     if (n === 3) return 3;
     return 2;
 }
 
-function mediaIsVideo(src) {
+function mediaIsVideo(src: string): boolean {
     return src.toLowerCase().endsWith(".mp4");
 }
 
-function questionHasVideo(q) {
-    return q.images.some(img => mediaIsVideo(img.src));
+function questionHasVideo(q: Question): boolean {
+    return q.images.some((img) => mediaIsVideo(img.src));
 }
 
-function updateScoreDisplay() {
-    const el = document.getElementById("game-score");
+const preloadedMedia = new Set<string>();
+const preloadedVideos: HTMLVideoElement[] = [];
+
+function preloadMedia(q: Question): void {
+    for (const media of q.images) {
+        if (preloadedMedia.has(media.src)) continue;
+        preloadedMedia.add(media.src);
+        if (mediaIsVideo(media.src)) {
+            const video = document.createElement("video");
+            video.preload = "auto";
+            video.muted = true;
+            video.src = media.src;
+            video.load();
+            preloadedVideos.push(video);
+        } else {
+            const img = new Image();
+            img.decoding = "async";
+            img.src = media.src;
+        }
+    }
+}
+
+function updateScoreDisplay(): void {
+    const el = byId("game-score");
     if (el) {
         const score = Math.round(Math.min(MAX_SCORE, state.score));
         el.textContent = `Score: ${score} / ${MAX_SCORE}`;
@@ -346,14 +453,14 @@ function updateScoreDisplay() {
 // ============================================================
 // Hearts
 // ============================================================
-function updateHearts() {
+function updateHearts(): void {
     const hearts = document.querySelectorAll("#hearts .heart");
     hearts.forEach((el, i) => {
         el.classList.toggle("lost", i >= state.hearts);
     });
 }
 
-function loseHeart() {
+function loseHeart(): void {
     if (state.hearts <= 0) return;
     state.hearts -= 1;
     updateHearts();
@@ -362,51 +469,56 @@ function loseHeart() {
 // ============================================================
 // Timer
 // ============================================================
-function timerDurationForQuestion(q) {
+function timerDurationForQuestion(q: Question): number {
     if (typeof q.timer === "number" && q.timer > 0) return q.timer * 1000;
     return (q.images.length <= 2 ? 10 : 20) * 1000;
 }
 
-function getAnswerRemainingMs() {
+function getAnswerRemainingMs(): number | null {
     if (state.timerPaused) return state.timerRemainingMs;
     if (!state.timerId) return null;
     const elapsed = performance.now() - state.timerStart;
     return Math.max(0, state.timerStartRemainingMs - elapsed);
 }
 
-function scoreForCorrectAnswer(remainingMs) {
-    const timeFraction = remainingMs !== null && state.timerDurationMs > 0
-        ? Math.max(0, Math.min(1, remainingMs / state.timerDurationMs))
-        : 0;
-    return (MAX_SCORE / MAX_LEVEL) *
-        (SCORE_ACCURACY_WEIGHT + SCORE_SPEED_WEIGHT * timeFraction);
+function scoreForCorrectAnswer(remainingMs: number | null): number {
+    const timeFraction =
+        remainingMs !== null && state.timerDurationMs > 0
+            ? Math.max(0, Math.min(1, remainingMs / state.timerDurationMs))
+            : 0;
+    return (
+        (MAX_SCORE / MAX_LEVEL) *
+        (SCORE_ACCURACY_WEIGHT + SCORE_SPEED_WEIGHT * timeFraction)
+    );
 }
 
-function setTimerReadoutText(text) {
-    const el = document.getElementById("timer-seconds");
+function setTimerReadoutText(text: string): void {
+    const el = byId("timer-seconds");
     if (el) el.textContent = text;
 }
 
-function updateTimerReadout() {
+function updateTimerReadout(): void {
     const seconds = Math.ceil(Math.max(0, state.timerRemainingMs) / 1000);
     setTimerReadoutText(seconds + "s");
 }
 
-function tickTimerReadout() {
+function tickTimerReadout(): void {
     if (state.timerPaused || state.answered) return;
     const elapsed = performance.now() - state.timerStart;
     state.timerRemainingMs = Math.max(0, state.timerStartRemainingMs - elapsed);
     updateTimerReadout();
 }
 
-function startTimer(durationMs, remainingMs = durationMs) {
+function startTimer(
+    durationMs: number,
+    remainingMs: number = durationMs,
+): void {
     clearTimer();
 
-    const startFraction = durationMs > 0
-        ? Math.max(0, Math.min(1, remainingMs / durationMs))
-        : 0;
+    const startFraction =
+        durationMs > 0 ? Math.max(0, Math.min(1, remainingMs / durationMs)) : 0;
 
-    const bar = document.getElementById("timer-bar");
+    const bar = byId("timer-bar");
     bar.classList.remove("warn");
     bar.style.transition = "none";
     bar.style.width = `${startFraction * 100}%`;
@@ -435,21 +547,36 @@ function startTimer(durationMs, remainingMs = durationMs) {
     }, remainingMs);
 }
 
-function clearTimer() {
-    if (state.timerId) { clearTimeout(state.timerId); state.timerId = null; }
-    if (state.warnTimeoutId) { clearTimeout(state.warnTimeoutId); state.warnTimeoutId = null; }
-    if (state.timerTickerId) { clearInterval(state.timerTickerId); state.timerTickerId = null; }
+function clearTimer(): void {
+    if (state.timerId) {
+        clearTimeout(state.timerId);
+        state.timerId = null;
+    }
+    if (state.warnTimeoutId) {
+        clearTimeout(state.warnTimeoutId);
+        state.warnTimeoutId = null;
+    }
+    if (state.timerTickerId) {
+        clearInterval(state.timerTickerId);
+        state.timerTickerId = null;
+    }
 }
 
-function pauseTimer() {
+function pauseTimer(): void {
     if (!state.timerId || state.timerPaused || state.answered) return;
     state.timerPaused = true;
     clearTimeout(state.timerId);
     state.timerId = null;
-    if (state.warnTimeoutId) { clearTimeout(state.warnTimeoutId); state.warnTimeoutId = null; }
-    if (state.timerTickerId) { clearInterval(state.timerTickerId); state.timerTickerId = null; }
+    if (state.warnTimeoutId) {
+        clearTimeout(state.warnTimeoutId);
+        state.warnTimeoutId = null;
+    }
+    if (state.timerTickerId) {
+        clearInterval(state.timerTickerId);
+        state.timerTickerId = null;
+    }
 
-    const bar = document.getElementById("timer-bar");
+    const bar = byId("timer-bar");
     const computed = getComputedStyle(bar).width;
     bar.style.transition = "none";
     bar.style.width = computed;
@@ -459,7 +586,7 @@ function pauseTimer() {
     updateTimerReadout();
 }
 
-function resumeTimer() {
+function resumeTimer(): void {
     if (!state.timerPaused || state.answered) return;
     state.timerPaused = false;
     if (state.timerRemainingMs > 0) {
@@ -470,20 +597,20 @@ function resumeTimer() {
 // ============================================================
 // Game — render
 // ============================================================
-function startLevel() {
+function startLevel(): void {
     state.answered = false;
     clearTimer();
     scrollToTop();
 
     if (state.questions.length === 0) {
-        document.getElementById("game-level").textContent = "Level " + state.level;
+        byId("game-level").textContent = "Level " + state.level;
         updateScoreDisplay();
-        document.getElementById("image-grid").innerHTML =
+        byId("image-grid").innerHTML =
             '<p style="text-align:center;color:var(--muted);grid-column:1/-1">No questions loaded.</p>';
-        document.getElementById("choices").innerHTML = "";
-        document.getElementById("feedback").classList.add("hidden");
-        document.getElementById("btn-next").classList.add("hidden");
-        document.getElementById("timer-bar").style.width = "100%";
+        byId("choices").innerHTML = "";
+        byId("feedback").classList.add("hidden");
+        byId("btn-next").classList.add("hidden");
+        byId("timer-bar").style.width = "100%";
         setTimerReadoutText("--");
         return;
     }
@@ -494,20 +621,22 @@ function startLevel() {
         return;
     }
 
-    document.getElementById("game-level").textContent = "Level " + state.level;
+    byId("game-level").textContent = "Level " + state.level;
     updateScoreDisplay();
 
     renderImages(state.currentQuestion);
+    const nextQuestion = pickQuestionForLevel(state.level + 1);
+    if (nextQuestion) preloadMedia(nextQuestion);
     renderChoices(state.currentQuestion);
     updateHearts();
 
-    const fb = document.getElementById("feedback");
+    const fb = byId("feedback");
     fb.className = "feedback hidden";
     fb.innerHTML = "";
-    document.getElementById("btn-next").classList.add("hidden");
+    byId("btn-next").classList.add("hidden");
 
     if (questionHasVideo(state.currentQuestion)) {
-        const bar = document.getElementById("timer-bar");
+        const bar = byId("timer-bar");
         bar.style.transition = "none";
         bar.style.width = "100%";
         bar.classList.remove("warn");
@@ -518,11 +647,11 @@ function startLevel() {
     }
 }
 
-function renderImages(q) {
-    const grid = document.getElementById("image-grid");
+function renderImages(q: Question): void {
+    const grid = byId("image-grid");
     grid.innerHTML = "";
-    grid.dataset.count = q.images.length;
-    grid.style.setProperty("--cols", colsFor(q.images.length));
+    grid.dataset.count = String(q.images.length);
+    grid.style.setProperty("--cols", String(colsFor(q.images.length)));
 
     q.images.forEach((img, i) => {
         const card = document.createElement("div");
@@ -543,13 +672,13 @@ function renderImages(q) {
                 <div class="label">${labelFor(i)}</div>
             `;
             const video = card.querySelector("video");
-            video.addEventListener("ended", () => {
+            video?.addEventListener("ended", () => {
                 if (state.answered || state.timerId) return;
                 startTimer(timerDurationForQuestion(q));
             });
         } else {
             card.innerHTML = `
-                <img src="${img.src}" alt="Option ${labelFor(i)}" />
+                <img src="${img.src}" alt="Option ${labelFor(i)}" decoding="async" />
                 <div class="label">${labelFor(i)}</div>
             `;
         }
@@ -558,8 +687,8 @@ function renderImages(q) {
     });
 }
 
-function renderChoices(q) {
-    const container = document.getElementById("choices");
+function renderChoices(q: Question): void {
+    const container = byId("choices");
     container.innerHTML = "";
     container.classList.remove("multiselect");
 
@@ -579,7 +708,12 @@ function renderChoices(q) {
     });
 }
 
-function choicesForMode(q) {
+interface ChoiceOption {
+    value: string;
+    text: string;
+}
+
+function choicesForMode(q: Question): ChoiceOption[] {
     switch (q.mode) {
         case 1:
             return [
@@ -605,7 +739,7 @@ function choicesForMode(q) {
     }
 }
 
-function renderMultiSelectChoices(q, container) {
+function renderMultiSelectChoices(q: Question, container: HTMLElement): void {
     container.classList.add("multiselect");
 
     q.images.forEach((img, i) => {
@@ -621,8 +755,11 @@ function renderMultiSelectChoices(q, container) {
     submit.className = "choice submit";
     submit.textContent = "Submit";
     submit.addEventListener("click", () => {
-        const picked = [...container.querySelectorAll(".choice.toggle.selected")]
-            .map(el => el.dataset.imageId);
+        const picked = [
+            ...container.querySelectorAll<HTMLElement>(
+                ".choice.toggle.selected",
+            ),
+        ].map((el) => el.dataset.imageId!);
         handleAnswer(picked);
     });
     container.appendChild(submit);
@@ -631,20 +768,25 @@ function renderMultiSelectChoices(q, container) {
 // ============================================================
 // Game — grading
 // ============================================================
-async function handleAnswer(value) {
+type AnswerValue = string | string[];
+
+async function handleAnswer(value: AnswerValue): Promise<void> {
     if (state.answered) return;
     state.answered = true;
 
     const remainingMs = getAnswerRemainingMs();
     clearTimer();
 
-    const q = state.currentQuestion;
+    const q = state.currentQuestion!;
     const correct = isCorrect(q, value);
     markChoiceButtons(q, value, correct);
-    const fb = document.getElementById("feedback");
+    const fb = byId("feedback");
 
     if (correct) {
-        state.score = Math.min(MAX_SCORE, state.score + scoreForCorrectAnswer(remainingMs));
+        state.score = Math.min(
+            MAX_SCORE,
+            state.score + scoreForCorrectAnswer(remainingMs),
+        );
         fb.className = "feedback good";
         fb.innerHTML = `<h3>Correct ✓</h3><p>${q.explanation}</p>`;
     } else {
@@ -653,7 +795,7 @@ async function handleAnswer(value) {
         fb.innerHTML = `<h3>Not quite ✗</h3><p>${q.explanation}</p>`;
     }
     fb.classList.remove("hidden");
-    document.getElementById("btn-next").classList.remove("hidden");
+    byId("btn-next").classList.remove("hidden");
     updateScoreDisplay();
 
     freezeTimerBar();
@@ -665,28 +807,28 @@ async function handleAnswer(value) {
         state.jumpscareInProgress = true;
         await playJumpscare();
         state.jumpscareInProgress = false;
-        document.getElementById("btn-next").textContent = "Continue →";
+        byId("btn-next").textContent = "Continue →";
     }
 
     revealNextAction();
 }
 
-async function onTimeout() {
+async function onTimeout(): Promise<void> {
     if (state.answered) return;
     state.answered = true;
     clearTimer();
     state.timerRemainingMs = 0;
     updateTimerReadout();
 
-    const q = state.currentQuestion;
-    const fb = document.getElementById("feedback");
+    const q = state.currentQuestion!;
+    const fb = byId("feedback");
 
     loseHeart();
     fb.className = "feedback bad";
     fb.innerHTML = `<h3>Time's up ⏱</h3><p>${q.explanation}</p>`;
     fb.classList.remove("hidden");
 
-    document.getElementById("btn-next").classList.remove("hidden");
+    byId("btn-next").classList.remove("hidden");
 
     markChoiceButtonsOnTimeout(q);
 
@@ -698,27 +840,27 @@ async function onTimeout() {
         state.jumpscareInProgress = true;
         await playJumpscare();
         state.jumpscareInProgress = false;
-        document.getElementById("btn-next").textContent = "Continue →";
+        byId("btn-next").textContent = "Continue →";
     }
 
     revealNextAction();
 }
 
-function freezeTimerBar() {
-    const bar = document.getElementById("timer-bar");
+function freezeTimerBar(): void {
+    const bar = byId("timer-bar");
     const computed = getComputedStyle(bar).width;
     bar.style.transition = "none";
     bar.style.width = computed;
 }
 
-function isCorrect(q, value) {
+function isCorrect(q: Question, value: AnswerValue): boolean {
     switch (q.mode) {
         case 1:
         case 2:
         case 3:
             return value === q.answer;
         case 4: {
-            const picked = new Set(value);
+            const picked = new Set(value as string[]);
             const truth = new Set(q.answer);
             if (picked.size !== truth.size) return false;
             for (const id of picked) if (!truth.has(id)) return false;
@@ -729,15 +871,17 @@ function isCorrect(q, value) {
     }
 }
 
-function revealPlayerImageFeedback(q, value) {
-    const cards = Array.from(document.querySelectorAll(".card"));
+function revealPlayerImageFeedback(q: Question, value: AnswerValue): void {
+    const cards = Array.from(document.querySelectorAll<HTMLElement>(".card"));
 
     // Mode 1: single image, player said "real" or "fake".
     if (q.mode === 1) {
         const isFake = q.answer === "fake";
         const playerSaidFake = value === "fake";
-        cards.forEach(card => {
-            card.classList.add(playerSaidFake === isFake ? "pick-correct" : "pick-wrong");
+        cards.forEach((card) => {
+            card.classList.add(
+                playerSaidFake === isFake ? "pick-correct" : "pick-wrong",
+            );
         });
         return;
     }
@@ -752,7 +896,7 @@ function revealPlayerImageFeedback(q, value) {
             // If wrong, they didn't judge individual images, so leave
             // the cards neutral; the button + feedback box carry it.
             if (value === q.answer) {
-                cards.forEach(card => card.classList.add("pick-correct"));
+                cards.forEach((card) => card.classList.add("pick-correct"));
             }
             return;
         }
@@ -761,7 +905,7 @@ function revealPlayerImageFeedback(q, value) {
         // also reveal the true fake card in green so the player learns
         // which one actually was fake.
         const correct = value === q.answer;
-        cards.forEach(card => {
+        cards.forEach((card) => {
             const id = card.dataset.imageId;
             if (id === value) {
                 card.classList.add(correct ? "pick-correct" : "pick-wrong");
@@ -775,38 +919,47 @@ function revealPlayerImageFeedback(q, value) {
     // Mode 4: multiselect — per-image correctness.
     if (q.mode === 4) {
         const truth = new Set(q.answer);
-        const picked = new Set(value || []);
-        cards.forEach(card => {
-            const id = card.dataset.imageId;
+        const picked = new Set(value as string[]);
+        cards.forEach((card) => {
+            const id = card.dataset.imageId!;
             const playerFlagged = picked.has(id);
             const isFake = truth.has(id);
-            card.classList.add(playerFlagged === isFake ? "pick-correct" : "pick-wrong");
+            card.classList.add(
+                playerFlagged === isFake ? "pick-correct" : "pick-wrong",
+            );
         });
         return;
     }
 }
 
-function markChoiceButtons(q, value, correct) {
-    const container = document.getElementById("choices");
+function markChoiceButtons(
+    q: Question,
+    value: AnswerValue,
+    correct: boolean,
+): void {
+    const container = byId("choices");
 
     if (q.mode === 4) {
         const truth = new Set(q.answer);
-        const picked = new Set(value || []);
-        container.querySelectorAll(".choice.toggle").forEach(btn => {
-            const id = btn.dataset.imageId;
-            const wasPicked = picked.has(id);
-            const isFake = truth.has(id);
-            if (wasPicked && isFake) btn.classList.add("correct");
-            else if (wasPicked && !isFake) btn.classList.add("wrong");
-            else if (!wasPicked && isFake) btn.classList.add("missed");
-            btn.disabled = true;
-        });
-        const submit = container.querySelector(".choice.submit");
+        const picked = new Set(value as string[]);
+        container
+            .querySelectorAll<HTMLButtonElement>(".choice.toggle")
+            .forEach((btn) => {
+                const id = btn.dataset.imageId!;
+                const wasPicked = picked.has(id);
+                const isFake = truth.has(id);
+                if (wasPicked && isFake) btn.classList.add("correct");
+                else if (wasPicked && !isFake) btn.classList.add("wrong");
+                else if (!wasPicked && isFake) btn.classList.add("missed");
+                btn.disabled = true;
+            });
+        const submit =
+            container.querySelector<HTMLButtonElement>(".choice.submit");
         if (submit) submit.disabled = true;
         return;
     }
 
-    container.querySelectorAll(".choice").forEach(btn => {
+    container.querySelectorAll<HTMLButtonElement>(".choice").forEach((btn) => {
         if (btn.dataset.value === value) {
             btn.classList.add(correct ? "correct" : "wrong");
         }
@@ -814,26 +967,32 @@ function markChoiceButtons(q, value, correct) {
     });
 
     if (!correct) {
-        const truthBtn = container.querySelector(`.choice[data-value="${q.answer}"]`);
+        const truthBtn = container.querySelector<HTMLButtonElement>(
+            `.choice[data-value="${q.answer}"]`,
+        );
         if (truthBtn) truthBtn.classList.add("correct");
     }
 }
 
-function markChoiceButtonsOnTimeout(q) {
-    const container = document.getElementById("choices");
+function markChoiceButtonsOnTimeout(q: Question): void {
+    const container = byId("choices");
 
     if (q.mode === 4) {
         const truth = new Set(q.answer);
-        container.querySelectorAll(".choice.toggle").forEach(btn => {
-            if (truth.has(btn.dataset.imageId)) btn.classList.add("correct");
-            btn.disabled = true;
-        });
-        const submit = container.querySelector(".choice.submit");
+        container
+            .querySelectorAll<HTMLButtonElement>(".choice.toggle")
+            .forEach((btn) => {
+                if (truth.has(btn.dataset.imageId!))
+                    btn.classList.add("correct");
+                btn.disabled = true;
+            });
+        const submit =
+            container.querySelector<HTMLButtonElement>(".choice.submit");
         if (submit) submit.disabled = true;
         return;
     }
 
-    container.querySelectorAll(".choice").forEach(btn => {
+    container.querySelectorAll<HTMLButtonElement>(".choice").forEach((btn) => {
         if (btn.dataset.value === q.answer) btn.classList.add("correct");
         btn.disabled = true;
     });
@@ -842,18 +1001,18 @@ function markChoiceButtonsOnTimeout(q) {
 // ============================================================
 // Interlude builder
 // ============================================================
-function buildInterludeForLevel(level) {
+function buildInterludeForLevel(level: number): void {
     state.pendingInterlude = [];
 
     if (NOTE_LEVELS.includes(level) && state.sessionNotesOrder.length > 0) {
         const nextId = state.sessionNotesOrder.shift();
-        const note = state.secrets.find(s => s.id === nextId);
+        const note = state.secrets.find((s) => s.id === nextId);
         if (note && !state.unlockedSecretIds.includes(note.id)) {
             state.pendingInterlude.push({ kind: "note", data: note });
         }
     }
 
-    const fact = state.facts.find(f => f.unlockedAtLevel === level);
+    const fact = state.facts.find((f) => f.unlockedAtLevel === level);
     if (fact && !state.unlockedFactIds.includes(fact.id)) {
         state.pendingInterlude.push({ kind: "fact", data: fact });
     }
@@ -866,7 +1025,7 @@ function buildInterludeForLevel(level) {
 // ============================================================
 // Interlude display
 // ============================================================
-function showInterlude() {
+function showInterlude(): void {
     const item = state.pendingInterlude[0];
     if (!item) {
         advanceAfterInterlude();
@@ -880,17 +1039,19 @@ function showInterlude() {
         return;
     }
 
-    const el = document.getElementById("interlude");
-    const card = document.getElementById("interlude-card");
-    const label = document.getElementById("interlude-label");
-    const title = document.getElementById("interlude-title");
-    const body = document.getElementById("interlude-body");
-    const source = document.getElementById("interlude-source");
+    const el = byId("interlude");
+    const card = byId("interlude-card");
+    const label = byId("interlude-label");
+    const title = byId("interlude-title");
+    const body = byId("interlude-body");
+    const source = byId<HTMLAnchorElement>("interlude-source");
 
     card.classList.remove("note");
 
     if (item.kind === "fact") {
-        label.textContent = item.data.teaser ? "A hint of something more" : "New Fact Unlocked";
+        label.textContent = item.data.teaser
+            ? "A hint of something more"
+            : "New Fact Unlocked";
         label.classList.remove("interlude-label-note");
     } else if (item.kind === "note") {
         label.textContent = "Torn Note Found";
@@ -915,12 +1076,12 @@ function showInterlude() {
     el.focus({ preventScroll: true });
 }
 
-function hideInterlude(unlock = true) {
-    document.getElementById("interlude").classList.add("hidden");
+function hideInterlude(unlock: boolean = true): void {
+    byId("interlude").classList.add("hidden");
     if (unlock) unlockBodyScroll();
 }
 
-function onInterludeContinue() {
+function onInterludeContinue(): void {
     if (state.interludeBusy) return;
     state.interludeBusy = true;
 
@@ -958,12 +1119,12 @@ function onInterludeContinue() {
     advanceAfterInterlude();
 }
 
-document.getElementById("interlude-continue").addEventListener("click", onInterludeContinue);
+byId("interlude-continue").addEventListener("click", onInterludeContinue);
 
 // ============================================================
 // Advance after the interlude
 // ============================================================
-function advanceAfterInterlude() {
+function advanceAfterInterlude(): void {
     if (state.hearts <= 0) {
         // Death path
         state.score = 0;
@@ -973,11 +1134,11 @@ function advanceAfterInterlude() {
         state.answered = false;
         state.sessionActive = false;
         updateHearts();
-        document.getElementById("btn-next").textContent = "Next →";
-        document.getElementById("image-grid").innerHTML = "";
-        document.getElementById("choices").innerHTML = "";
-        document.getElementById("feedback").classList.add("hidden");
-        document.getElementById("btn-next").classList.add("hidden");
+        byId("btn-next").textContent = "Next →";
+        byId("image-grid").innerHTML = "";
+        byId("choices").innerHTML = "";
+        byId("feedback").classList.add("hidden");
+        byId("btn-next").classList.add("hidden");
         setTimerReadoutText("--");
         showScreen("menu");
         return;
@@ -995,7 +1156,7 @@ function advanceAfterInterlude() {
 // ============================================================
 // Next button
 // ============================================================
-document.getElementById("btn-next").addEventListener("click", () => {
+byId("btn-next").addEventListener("click", () => {
     if (state.answered === false) return;
 
     if (state.pendingInterlude.length > 0) {
@@ -1009,14 +1170,16 @@ document.getElementById("btn-next").addEventListener("click", () => {
 // ============================================================
 // Jumpscare
 // ============================================================
-function playJumpscare() {
-    const app = document.getElementById("app");
-    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+function playJumpscare(): Promise<void> {
+    const app = byId("app");
+    const reduceMotion = window.matchMedia(
+        "(prefers-reduced-motion: reduce)",
+    ).matches;
 
     if (reduceMotion) return Promise.resolve();
 
     app.classList.add("jumpscare");
-    return new Promise(resolve => {
+    return new Promise<void>((resolve) => {
         setTimeout(() => {
             app.classList.remove("jumpscare");
             resolve();
@@ -1027,17 +1190,18 @@ function playJumpscare() {
 // ============================================================
 // Facts + Secrets
 // ============================================================
-function updateFactsBadge() {
+function updateFactsBadge(): void {
     const total = state.facts.length + state.secrets.length;
-    const unlocked = state.unlockedFactIds.length + state.unlockedSecretIds.length;
-    document.getElementById("facts-badge").textContent = `${unlocked}/${total}`;
+    const unlocked =
+        state.unlockedFactIds.length + state.unlockedSecretIds.length;
+    byId("facts-badge").textContent = `${unlocked}/${total}`;
 }
 
-function renderFacts() {
-    const list = document.getElementById("facts-list");
+function renderFacts(): void {
+    const list = byId("facts-list");
     list.innerHTML = "";
 
-    state.facts.forEach(f => {
+    state.facts.forEach((f) => {
         const unlocked = state.unlockedFactIds.includes(f.id);
         const div = document.createElement("div");
         div.className = `fact ${f.type} ${unlocked ? "" : "locked"}`;
@@ -1056,10 +1220,10 @@ function renderFacts() {
         list.appendChild(heading);
 
         const ordered = [...state.secrets].sort(
-            (a, b) => (a.fragmentIndex ?? 0) - (b.fragmentIndex ?? 0)
+            (a, b) => (a.fragmentIndex ?? 0) - (b.fragmentIndex ?? 0),
         );
 
-        ordered.forEach(s => {
+        ordered.forEach((s) => {
             const unlocked = state.unlockedSecretIds.includes(s.id);
             const div = document.createElement("div");
             div.className = `fact ${s.type} note ${unlocked ? "" : "locked"}`;
@@ -1076,14 +1240,14 @@ function renderFacts() {
 // ============================================================
 // Focus trap for modals
 // ============================================================
-function trapFocus(container, event) {
+function trapFocus(container: HTMLElement, event: KeyboardEvent): void {
     if (event.key !== "Tab") return;
-    const focusables = container.querySelectorAll(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    const focusables = container.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
     );
     if (focusables.length === 0) return;
-    const first = focusables[0];
-    const last = focusables[focusables.length - 1];
+    const first = focusables[0]!;
+    const last = focusables[focusables.length - 1]!;
 
     if (event.shiftKey && document.activeElement === first) {
         event.preventDefault();
@@ -1094,18 +1258,18 @@ function trapFocus(container, event) {
     }
 }
 
-document.getElementById("interlude").addEventListener("keydown", e => {
-    trapFocus(document.getElementById("interlude"), e);
+byId("interlude").addEventListener("keydown", (e) => {
+    trapFocus(byId("interlude"), e);
 });
-document.getElementById("game-complete").addEventListener("keydown", e => {
-    trapFocus(document.getElementById("game-complete"), e);
+byId("game-complete").addEventListener("keydown", (e) => {
+    trapFocus(byId("game-complete"), e);
 });
 
 // ============================================================
 // Tab visibility: pause the timer when the tab is hidden
 // ============================================================
 document.addEventListener("visibilitychange", () => {
-    const gameVisible = document.getElementById("screen-game").classList.contains("active");
+    const gameVisible = byId("screen-game").classList.contains("active");
     if (!gameVisible) return;
 
     if (document.hidden) {
@@ -1118,10 +1282,23 @@ document.addEventListener("visibilitychange", () => {
 // ============================================================
 // Boot
 // ============================================================
-(async function init() {
+(async function init(): Promise<void> {
     loadProgress();
     await loadData();
     updateFactsBadge();
     updateHearts();
     showScreen("menu");
 })();
+
+// ============================================================
+// HMR: a quiz run holds timers and DOM listeners, so the safe
+// path is to tear down timers and reload the page on update.
+// ============================================================
+if (import.meta.hot) {
+    import.meta.hot.dispose(() => {
+        clearTimer();
+    });
+    import.meta.hot.accept(() => {
+        location.reload();
+    });
+}

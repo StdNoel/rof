@@ -1,8 +1,67 @@
 /* Last Call - standalone darts drinking game */
-(() => {
-    "use strict";
 
-    // ============================================================
+import { createSfxEngine, type NoiseOptions, type ToneOptions } from "../sfx";
+
+// ============================================================
+// Types
+// ============================================================
+type DartsMode = "solo" | "duo";
+type Difficulty = "easy" | "normal" | "hard";
+type Screen = "lobby" | "match";
+type TimingQuality = "perfect" | "good" | "off";
+
+interface Point { x: number; y: number; }
+interface DartThrow { x: number; y: number; score: number; label: string; }
+interface DartPlayer { index: 0 | 1; name: string; isBot: boolean; color: string; total: number; roundScore: number; drinks: number; darts: DartThrow[]; dartsThrown: number; }
+interface TimingStage { start: number; pos: number; marker: number; offset: number | null; }
+type MatchPhase = "toast" | "turnStart" | "pass" | "aim" | "timing" | "flight" | "turnEnd" | "roundEnd" | "drink" | "end";
+interface TimingState { stage: "horizontal" | "vertical" | "done"; finalAim: Point | null; horizontal: TimingStage; vertical: TimingStage; }
+interface DartsMatch { mode: DartsMode; difficulty: Difficulty; round: number; starter: 0 | 1; active: 0 | 1; turnsTaken: number; dartsLeft: number; phase: MatchPhase; players: [DartPlayer, DartPlayer]; winner: number | null; blacked: number[]; lockedAim: Point | null; timing: TimingState | null; recorded?: boolean; lastLosers?: number[]; }
+interface Flight { from: Point; to: Point; start: number; player: 0 | 1; color: string; isP2: boolean; }
+interface ScoreResult { score: number; label: string; ring: "miss" | "bull" | "outer-bull" | "single" | "triple" | "double"; sector: number; mult: number; }
+interface Popup { x: number; y: number; text: string; color: string; age: number; life: number; }
+interface BotPlan { aim: Point; targetAt: number; }
+interface SoloRecord { wins: number; losses: number; best: number | null; }
+interface DuoRecord { p1: number; p2: number; bestP1: number | null; bestP2: number | null; }
+interface Records { solo: Record<Difficulty, SoloRecord>; duo: DuoRecord; }
+interface Settings { muted: boolean; reducedEffects: boolean; }
+interface GameState { mode: DartsMode; difficulty: Difficulty; settings: Settings; records: Records; screen: Screen; match: DartsMatch | null; timers: ReturnType<typeof setTimeout>[]; paused: boolean; pendingResume: boolean; pausedAt: number; }
+interface DrunkLevel { label: string; sigma: number; sway: number; }
+interface DifficultyConfig { name: string; baseSigma: number; }
+interface RawSoloRecord { wins: number; losses: number; best: number; }
+interface RawDuoRecord { p1: number; p2: number; best: number; bestP1: number; bestP2: number; }
+interface RawRecords { solo?: Record<string, RawSoloRecord>; duo?: RawDuoRecord; }
+
+interface DomCache {
+    screenLobby: HTMLElement; screenMatch: HTMLElement; lobbyMute: HTMLElement; matchMute: HTMLElement;
+    difficultyField: HTMLElement; effectsToggle: HTMLElement; startBtn: HTMLElement; recordsLine: HTMLElement; resetRecords: HTMLElement;
+    quitBtn: HTMLElement; hudRound: HTMLElement; hudTurn: HTMLElement; board: HTMLCanvasElement; fx: HTMLCanvasElement;
+    boardStage: HTMLElement; boardFrame: HTMLElement; turnBanner: HTMLElement; dartsLeft: HTMLElement; statusLine: HTMLElement; live: HTMLElement;
+    timingUi: HTMLElement; timingH: HTMLElement; timingV: HTMLElement; timingHMarker: HTMLElement; timingVMarker: HTMLElement; timingCaption: HTMLElement;
+    startOverlay: HTMLElement; startTitle: HTMLElement; startContinue: HTMLElement;
+    passOverlay: HTMLElement; passKicker: HTMLElement; passTitle: HTMLElement; passSub: HTMLElement; passContinue: HTMLElement;
+    roundOverlay: HTMLElement; roundKicker: HTMLElement; roundTitle: HTMLElement; roundSub: HTMLElement; drinkRow: HTMLElement;
+    roundContinue: HTMLElement; endOverlay: HTMLElement; endKicker: HTMLElement; endTitle: HTMLElement; endSub: HTMLElement;
+    endRematch: HTMLElement; endLobby: HTMLElement; quitOverlay: HTMLElement; quitCancel: HTMLElement; quitConfirm: HTMLElement;
+    modeCards: HTMLElement[]; difficultyButtons: HTMLElement[];
+    panels: [HTMLElement, HTMLElement]; turnChips: [HTMLElement, HTMLElement]; names: [HTMLElement, HTMLElement];
+    totals: [HTMLElement, HTMLElement]; roundScores: [HTMLElement, HTMLElement]; sips: [HTMLElement, HTMLElement];
+    roundNames: [HTMLElement, HTMLElement]; roundVals: [HTMLElement, HTMLElement];
+    endNames: [HTMLElement, HTMLElement]; endDrinks: [HTMLElement, HTMLElement];
+    endDarts: [HTMLElement, HTMLElement]; endTotals: [HTMLElement, HTMLElement];
+    ctx: CanvasRenderingContext2D; fxCtx: CanvasRenderingContext2D;
+}
+
+interface ViewState { size: number; dpr: number; cx: number; cy: number; R: number; }
+interface InputState {
+    pointer: Point | null;
+    hover: Point | null;
+    keyboard: Point | null;
+    lastDevice: "touch" | "pointer";
+}
+interface DragState { active: boolean; pointerId: number | null; point: Point | null; }
+
+// ============================================================
     // Config
     // ============================================================
     const SETTINGS_KEY = "lc-settings-v1";
@@ -28,7 +87,7 @@ const TIMING_STOP_MS = 260;
         doubleOut: 1,
     };
 
-    const DRUNK = [
+    const DRUNK: DrunkLevel[] = [
         { label: "Sober", sigma: 0.018, sway: 0 },
         { label: "Tipsy", sigma: 0.028, sway: 0.3 },
         { label: "Buzzed", sigma: 0.045, sway: 0.6 },
@@ -37,41 +96,41 @@ const TIMING_STOP_MS = 260;
         { label: "Blackout", sigma: 0.1, sway: 1.6 },
     ];
 
-    const DIFFICULTY = {
+    const DIFFICULTY: Record<Difficulty, DifficultyConfig> = {
         easy: { name: "Rookie", baseSigma: 0.085 },
         normal: { name: "Regular", baseSigma: 0.05 },
         hard: { name: "Legend", baseSigma: 0.025 },
     };
 
     const COLORS = { p1: "#ffb347", p2: "#2ee6d0" };
-    const PLAYER_NAMES = ["Player 1", "Player 2"];
+    const PLAYER_NAMES: [string, string] = ["Player 1", "Player 2"];
     const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
     const coarsePointerQuery = window.matchMedia("(any-pointer: coarse)");
 
-    function isTouchDevice() {
+    function isTouchDevice(): boolean {
         return coarsePointerQuery.matches || navigator.maxTouchPoints > 0;
     }
 
-    function prefersTouchUi() {
+    function prefersTouchUi(): boolean {
         return input.lastDevice === "touch";
     }
 
     // ============================================================
     // Helpers
     // ============================================================
-    function clamp(value, min, max) {
+    function clamp(value: number, min: number, max: number): number {
         return Math.max(min, Math.min(max, value));
     }
 
-    function rand(min, max) {
+    function rand(min: number, max: number): number {
         return min + Math.random() * (max - min);
     }
 
-    function pick(list) {
-        return list[Math.floor(Math.random() * list.length)];
+    function pick<T>(list: readonly T[]): T {
+        return list[Math.floor(Math.random() * list.length)]!;
     }
 
-    function gauss() {
+    function gauss(): number {
         let u = 0;
         let v = 0;
         while (u === 0) u = Math.random();
@@ -79,47 +138,47 @@ const TIMING_STOP_MS = 260;
         return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
     }
 
-    function rad(degrees) {
+    function rad(degrees: number): number {
         return (degrees * Math.PI) / 180;
     }
 
-function adjustSigma(sigma, drinks) {
-    return sigma * (DRUNK[drinks].sigma / DRUNK[0].sigma);
+function adjustSigma(sigma: number, drinks: number): number {
+    return sigma * (DRUNK[drinks]!.sigma / DRUNK[0]!.sigma);
 }
 
-function timingPeriod(drinks) {
+function timingPeriod(drinks: number): number {
     return Math.max(TIMING_MIN_PERIOD, TIMING_BASE_PERIOD * Math.pow(0.86, drinks));
 }
 
-function timingPosition(start, now, period) {
+function timingPosition(start: number, now: number, period: number): number {
     const phase = ((now - start) / period) % 1;
     return phase < 0.5 ? phase * 2 : 2 - phase * 2;
 }
 
-function timingQuality(offset) {
+function timingQuality(offset: number): TimingQuality {
     const distance = Math.abs(offset);
     if (distance <= 0.08) return "perfect";
     if (distance <= 0.22) return "good";
     return "off";
 }
 
-    function makeRecord() {
+    function makeRecord(): SoloRecord {
         return { wins: 0, losses: 0, best: null };
     }
 
-    function makeDuoRecord() {
+    function makeDuoRecord(): DuoRecord {
         return { p1: 0, p2: 0, bestP1: null, bestP2: null };
     }
 
     // ============================================================
     // Persistence
     // ============================================================
-    function loadSettings() {
-        const defaults = { muted: false, reducedEffects: false };
+    function loadSettings(): Settings {
+        const defaults: Settings = { muted: false, reducedEffects: false };
         try {
             const raw = localStorage.getItem(SETTINGS_KEY);
             if (!raw) return defaults;
-            const data = JSON.parse(raw);
+            const data = JSON.parse(raw) as Record<string, unknown>;
             return {
                 muted: Boolean(data.muted),
                 reducedEffects: Boolean(data.reducedEffects),
@@ -129,22 +188,22 @@ function timingQuality(offset) {
         }
     }
 
-    function saveSettings() {
+    function saveSettings(): void {
         try {
             localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings));
         } catch (err) { /* storage unavailable */ }
     }
 
-    function loadRecords() {
-        const defaults = {
+    function loadRecords(): Records {
+        const defaults: Records = {
             solo: { easy: makeRecord(), normal: makeRecord(), hard: makeRecord() },
             duo: makeDuoRecord(),
         };
         try {
             const raw = localStorage.getItem(RECORDS_KEY);
             if (!raw) return defaults;
-            const data = JSON.parse(raw);
-            for (const key of ["easy", "normal", "hard"]) {
+            const data = JSON.parse(raw) as RawRecords;
+            for (const key of ["easy", "normal", "hard"] as const) {
                 const record = data && data.solo && data.solo[key];
                 if (record && typeof record === "object") {
                     defaults.solo[key] = {
@@ -174,7 +233,7 @@ function timingQuality(offset) {
         return defaults;
     }
 
-    function saveRecords() {
+    function saveRecords(): void {
         try {
             localStorage.setItem(RECORDS_KEY, JSON.stringify(state.records));
         } catch (err) { /* storage unavailable */ }
@@ -183,7 +242,7 @@ function timingQuality(offset) {
     // ============================================================
     // State & DOM
     // ============================================================
-    const state = {
+    const state: GameState = {
         mode: "solo",
         difficulty: "normal",
         settings: loadSettings(),
@@ -196,49 +255,91 @@ function timingQuality(offset) {
         pausedAt: 0,
     };
 
-    const dom = {};
-    const view = { size: 0, dpr: 1, cx: 0, cy: 0, R: 0 };
-    const input = {
+    const dom = {} as DomCache;
+    const view: ViewState = { size: 0, dpr: 1, cx: 0, cy: 0, R: 0 };
+    const input: InputState = {
         pointer: null,
         hover: null,
         keyboard: null,
         lastDevice: isTouchDevice() ? "touch" : "pointer",
     };
-    const drag = { active: false, pointerId: null, point: null };
-    const popups = [];
-    const audio = { ctx: null, muted: state.settings.muted };
+    const drag: DragState = { active: false, pointerId: null, point: null };
+    const popups: Popup[] = [];
+    const sfxEngine = createSfxEngine(state.settings.muted);
 
-    let boardBuffer = null;
-    let flight = null;
-    let botPlan = null;
+    let boardBuffer: HTMLCanvasElement | null = null;
+    let boardDirty = true;
+    let sceneLevel = -1;
+    let sceneReduced = false;
+    let forceRender = false;
+    let timingCaptionCache = "";
+    let timingStageCache = "";
+    let timingMarkerCacheH = NaN;
+    let timingMarkerCacheV = NaN;
+    let flight: Flight | null = null;
+    let botPlan: BotPlan | null = null;
     let lastFrame = 0;
     let rafId = 0;
 
-    function byId(id) {
-        return document.getElementById(id);
+    function byId<T extends HTMLElement = HTMLElement>(id: string): T {
+        const el = document.getElementById(id);
+        if (!el) throw new Error(`Missing element #${id}`);
+        return el as T;
     }
 
-    function cacheDom() {
-        const ids = [
-            "screen-lobby", "screen-match", "lobby-mute", "match-mute", "difficulty-field",
-            "effects-toggle", "start-btn", "records-line", "reset-records",
-            "quit-btn", "hud-round", "hud-turn", "board", "fx", "board-stage", "board-frame",
-            "turn-banner", "darts-left", "status-line", "live",
-            "timing-ui", "timing-h", "timing-v", "timing-h-marker", "timing-v-marker",
-            "timing-caption",
-            "start-overlay", "start-title", "start-sub", "start-continue",
-            "pass-overlay", "pass-kicker", "pass-title", "pass-sub", "pass-continue",
-            "round-overlay", "round-kicker", "round-title", "round-sub", "drink-row",
-            "round-continue", "end-overlay", "end-kicker", "end-title", "end-sub",
-            "end-rematch", "end-lobby", "quit-overlay", "quit-cancel", "quit-confirm",
-        ];
-        for (const id of ids) {
-            const camel = id.replace(/-([a-z])/g, (m, c) => c.toUpperCase());
-            dom[camel] = byId(id);
-        }
+    function cacheDom(): void {
+        dom.screenLobby = byId("screen-lobby");
+        dom.screenMatch = byId("screen-match");
+        dom.lobbyMute = byId("lobby-mute");
+        dom.matchMute = byId("match-mute");
+        dom.difficultyField = byId("difficulty-field");
+        dom.effectsToggle = byId("effects-toggle");
+        dom.startBtn = byId("start-btn");
+        dom.recordsLine = byId("records-line");
+        dom.resetRecords = byId("reset-records");
+        dom.quitBtn = byId("quit-btn");
+        dom.hudRound = byId("hud-round");
+        dom.hudTurn = byId("hud-turn");
+        dom.board = byId<HTMLCanvasElement>("board");
+        dom.fx = byId<HTMLCanvasElement>("fx");
+        dom.boardStage = byId("board-stage");
+        dom.boardFrame = byId("board-frame");
+        dom.turnBanner = byId("turn-banner");
+        dom.dartsLeft = byId("darts-left");
+        dom.statusLine = byId("status-line");
+        dom.live = byId("live");
+        dom.timingUi = byId("timing-ui");
+        dom.timingH = byId("timing-h");
+        dom.timingV = byId("timing-v");
+        dom.timingHMarker = byId("timing-h-marker");
+        dom.timingVMarker = byId("timing-v-marker");
+        dom.timingCaption = byId("timing-caption");
+        dom.startOverlay = byId("start-overlay");
+        dom.startTitle = byId("start-title");
+        dom.startContinue = byId("start-continue");
+        dom.passOverlay = byId("pass-overlay");
+        dom.passKicker = byId("pass-kicker");
+        dom.passTitle = byId("pass-title");
+        dom.passSub = byId("pass-sub");
+        dom.passContinue = byId("pass-continue");
+        dom.roundOverlay = byId("round-overlay");
+        dom.roundKicker = byId("round-kicker");
+        dom.roundTitle = byId("round-title");
+        dom.roundSub = byId("round-sub");
+        dom.drinkRow = byId("drink-row");
+        dom.roundContinue = byId("round-continue");
+        dom.endOverlay = byId("end-overlay");
+        dom.endKicker = byId("end-kicker");
+        dom.endTitle = byId("end-title");
+        dom.endSub = byId("end-sub");
+        dom.endRematch = byId("end-rematch");
+        dom.endLobby = byId("end-lobby");
+        dom.quitOverlay = byId("quit-overlay");
+        dom.quitCancel = byId("quit-cancel");
+        dom.quitConfirm = byId("quit-confirm");
 
-        dom.modeCards = Array.from(document.querySelectorAll("[data-mode]"));
-        dom.difficultyButtons = Array.from(document.querySelectorAll("[data-difficulty]"));
+        dom.modeCards = Array.from(document.querySelectorAll<HTMLElement>("[data-mode]"));
+        dom.difficultyButtons = Array.from(document.querySelectorAll<HTMLElement>("[data-difficulty]"));
         dom.panels = [byId("panel-0"), byId("panel-1")];
         dom.turnChips = [byId("turn-chip-0"), byId("turn-chip-1")];
         dom.names = [byId("name-0"), byId("name-1")];
@@ -251,26 +352,26 @@ function timingQuality(offset) {
         dom.endDrinks = [byId("end-drinks-0"), byId("end-drinks-1")];
         dom.endDarts = [byId("end-darts-0"), byId("end-darts-1")];
         dom.endTotals = [byId("end-total-0"), byId("end-total-1")];
-        dom.ctx = dom.board.getContext("2d");
-        dom.fxCtx = dom.fx.getContext("2d");
+        dom.ctx = dom.board.getContext("2d") as CanvasRenderingContext2D;
+        dom.fxCtx = dom.fx.getContext("2d") as CanvasRenderingContext2D;
     }
 
-    function announce(text) {
+    function announce(text: string): void {
         if (dom.live) dom.live.textContent = text;
     }
 
-    function focusBoard() {
+    function focusBoard(): void {
         if (dom.board && typeof dom.board.focus === "function") {
             dom.board.focus({ preventScroll: true });
         }
     }
 
-    function clearTimers() {
+    function clearTimers(): void {
         for (const id of state.timers) clearTimeout(id);
         state.timers = [];
     }
 
-    function later(fn, ms) {
+    function later(fn: () => void, ms: number): ReturnType<typeof setTimeout> {
         const id = setTimeout(() => {
             state.timers = state.timers.filter((timer) => timer !== id);
             if (state.paused) {
@@ -284,104 +385,57 @@ function timingQuality(offset) {
     }
 
     // ============================================================
-    // Audio (WebAudio, no files)
+    // Audio (shared WebAudio engine)
     // ============================================================
-    function ensureAudio() {
-        if (audio.muted) return null;
-        if (!audio.ctx) {
-            const Ctx = window.AudioContext || window.webkitAudioContext;
-            if (!Ctx) return null;
-            audio.ctx = new Ctx();
-        }
-        if (audio.ctx.state === "suspended") {
-            audio.ctx.resume().catch(() => { });
-        }
-        return audio.ctx;
+    function ensureAudio(): void {
+        sfxEngine.resume();
     }
 
-    function tone(freq, duration, type, gain, slideTo, delay) {
-        const ctx = audio.ctx;
-        if (!ctx || audio.muted) return;
-        const start = ctx.currentTime + (delay || 0);
-        const osc = ctx.createOscillator();
-        const amp = ctx.createGain();
-        osc.type = type || "sine";
-        osc.frequency.setValueAtTime(Math.max(20, freq), start);
-        if (slideTo) {
-            osc.frequency.exponentialRampToValueAtTime(Math.max(20, slideTo), start + duration);
-        }
-        amp.gain.setValueAtTime(0.0001, start);
-        amp.gain.exponentialRampToValueAtTime(Math.max(0.0002, gain || 0.08), start + 0.012);
-        amp.gain.exponentialRampToValueAtTime(0.0001, start + duration);
-        osc.connect(amp);
-        amp.connect(ctx.destination);
-        osc.start(start);
-        osc.stop(start + duration + 0.03);
+    function tone(freq: number, duration: number, type?: OscillatorType, gain?: number, slideTo?: number | null, delay?: number, extra?: ToneOptions): void {
+        sfxEngine.tone(freq, duration, { type, gain, slideTo, delay, ...extra });
     }
 
-    function noiseBurst(duration, gain, filterFreq, delay) {
-        const ctx = audio.ctx;
-        if (!ctx || audio.muted) return;
-        const start = ctx.currentTime + (delay || 0);
-        const frames = Math.max(1, Math.floor(ctx.sampleRate * duration));
-        const buffer = ctx.createBuffer(1, frames, ctx.sampleRate);
-        const data = buffer.getChannelData(0);
-        for (let i = 0; i < frames; i += 1) {
-            data[i] = Math.random() * 2 - 1;
-        }
-        const source = ctx.createBufferSource();
-        source.buffer = buffer;
-        const filter = ctx.createBiquadFilter();
-        filter.type = "bandpass";
-        filter.frequency.value = filterFreq || 900;
-        filter.Q.value = 0.8;
-        const amp = ctx.createGain();
-        amp.gain.setValueAtTime(gain || 0.05, start);
-        amp.gain.exponentialRampToValueAtTime(0.0001, start + duration);
-        source.connect(filter);
-        filter.connect(amp);
-        amp.connect(ctx.destination);
-        source.start(start);
+    function noiseBurst(duration: number, gain?: number, filterFreq?: number, delay?: number, extra?: NoiseOptions): void {
+        sfxEngine.noise(duration, { gain, filterFreq, delay, ...extra });
     }
 
-    function sfx(name) {
-        if (!audio.ctx || audio.muted) return;
+    function sfx(name: string): void {
         switch (name) {
             case "click":
-                tone(340, 0.05, "square", 0.025);
+                tone(340, 0.06, "square", 0.028, null, 0, { reverb: 0.08 });
                 break;
             case "whoosh":
-                noiseBurst(0.14, 0.05, 1200);
+                noiseBurst(0.18, 0.055, 1200, 0, { reverb: 0.16 });
                 break;
             case "thunk":
-                tone(150, 0.13, "triangle", 0.1, 58);
-                noiseBurst(0.05, 0.035, 500);
+                tone(150, 0.2, "triangle", 0.12, 58, 0, { sub: true, drive: 0.2 });
+                noiseBurst(0.07, 0.04, 500, 0, { reverb: 0.18 });
                 break;
             case "tick":
-                tone(620, 0.06, "sine", 0.05);
+                tone(620, 0.09, "sine", 0.055, null, 0, { reverb: 0.08 });
                 break;
             case "bull":
-                tone(660, 0.1, "sine", 0.07);
-                tone(990, 0.18, "sine", 0.06, null, 0.09);
+                tone(660, 0.14, "sine", 0.08, null, 0, { detune: 8, reverb: 0.24 });
+                tone(990, 0.24, "sine", 0.07, null, 0.09, { detune: 8, reverb: 0.26 });
                 break;
             case "glug":
-                tone(300, 0.09, "triangle", 0.06, 190);
-                tone(260, 0.09, "triangle", 0.05, 160, 0.1);
-                tone(220, 0.12, "triangle", 0.045, 130, 0.2);
+                tone(300, 0.12, "triangle", 0.07, 190, 0, { reverb: 0.14 });
+                tone(260, 0.12, "triangle", 0.06, 160, 0.1, { reverb: 0.14 });
+                tone(220, 0.16, "triangle", 0.055, 130, 0.2, { reverb: 0.14 });
                 break;
             case "sting":
-                tone(220, 0.32, "sawtooth", 0.045, 90);
+                tone(220, 0.4, "sawtooth", 0.06, 90, 0, { sub: true, drive: 0.2, reverb: 0.24 });
                 break;
             case "blackout":
-                tone(78, 1.2, "sine", 0.11, 38);
-                tone(117, 0.9, "triangle", 0.04, 55, 0.05);
-                tone(82, 1.15, "sine", 0.05, 44, 0.18);
-                noiseBurst(0.8, 0.025, 240);
+                tone(78, 1.35, "sine", 0.13, 38, 0, { sub: true, reverb: 0.3 });
+                tone(117, 1.05, "triangle", 0.05, 55, 0.05, { detune: 6, reverb: 0.28 });
+                tone(82, 1.3, "sine", 0.06, 44, 0.18, { sub: true, reverb: 0.3 });
+                noiseBurst(0.95, 0.035, 240, 0, { reverb: 0.28 });
                 break;
             case "win":
-                tone(523, 0.13, "sine", 0.06);
-                tone(659, 0.13, "sine", 0.06, null, 0.12);
-                tone(784, 0.22, "sine", 0.07, null, 0.24);
+                tone(523, 0.17, "sine", 0.07, null, 0, { detune: 8, reverb: 0.26 });
+                tone(659, 0.17, "sine", 0.07, null, 0.12, { detune: 8, reverb: 0.28 });
+                tone(784, 0.3, "sine", 0.08, null, 0.24, { detune: 8, reverb: 0.3 });
                 break;
             default:
                 break;
@@ -400,14 +454,14 @@ function timingQuality(offset) {
         rim: "#ffb347",
     };
 
-    function annularSector(ctx, cx, cy, inner, outer, start, end) {
+    function annularSector(ctx: CanvasRenderingContext2D, cx: number, cy: number, inner: number, outer: number, start: number, end: number): void {
         ctx.beginPath();
         ctx.arc(cx, cy, outer, start, end);
         ctx.arc(cx, cy, inner, end, start, true);
         ctx.closePath();
     }
 
-    function drawBoard(ctx, size, cx, cy, R) {
+    function drawBoard(ctx: CanvasRenderingContext2D, size: number, cx: number, cy: number, R: number): void {
         ctx.clearRect(0, 0, size, size);
 
         const backdrop = ctx.createRadialGradient(cx, cy - R * 0.2, R * 0.1, cx, cy, R * 1.2);
@@ -487,12 +541,12 @@ function timingQuality(offset) {
             const angle = rad(-90 + i * 18);
             const nx = Math.cos(angle) * R * 1.085;
             const ny = Math.sin(angle) * R * 1.085;
-            ctx.fillText(String(SECTORS[i]), cx + nx, cy + ny);
+            ctx.fillText(String(SECTORS[i]!), cx + nx, cy + ny);
         }
         ctx.shadowBlur = 0;
     }
 
-    function scoreAt(nx, ny) {
+    function scoreAt(nx: number, ny: number): ScoreResult {
         const r = Math.hypot(nx, ny);
         if (r > RINGS.doubleOut) {
             return { score: 0, label: "MISS", ring: "miss", sector: 0, mult: 0 };
@@ -506,9 +560,9 @@ function timingQuality(offset) {
         let angle = Math.atan2(nx, -ny) * 180 / Math.PI;
         if (angle < 0) angle += 360;
         const index = Math.floor(((angle + 9) % 360) / 18);
-        const sector = SECTORS[index];
+        const sector = SECTORS[index]!;
         let mult = 1;
-        let ring = "single";
+        let ring: ScoreResult["ring"] = "single";
         if (r >= RINGS.tripleIn && r <= RINGS.tripleOut) {
             mult = 3;
             ring = "triple";
@@ -525,7 +579,7 @@ function timingQuality(offset) {
         };
     }
 
-    function resizeCanvas() {
+    function resizeCanvas(): void {
         const size = Math.round(dom.board.clientWidth);
         if (!size) return;
         const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -544,12 +598,13 @@ function timingQuality(offset) {
         boardBuffer = document.createElement("canvas");
         boardBuffer.width = Math.round(size * dpr);
         boardBuffer.height = Math.round(size * dpr);
-        const bctx = boardBuffer.getContext("2d");
+        const bctx = boardBuffer.getContext("2d")!;
         bctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         drawBoard(bctx, size, view.cx, view.cy, view.R);
+        boardDirty = true;
     }
 
-    function targetPoint(sector, ring) {
+    function targetPoint(sector: number, ring: "single" | "triple" | "double" | "outerBull" | "bull"): Point {
         const index = Math.max(0, SECTORS.indexOf(sector));
         const angle = rad(-90 + index * 18);
         let radius = 0.78;
@@ -560,7 +615,7 @@ function timingQuality(offset) {
         return { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius };
     }
 
-    function pickBotTarget() {
+    function pickBotTarget(): Point {
         const difficulty = state.match ? state.match.difficulty : state.difficulty;
         const roll = Math.random();
         const highs = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 16, 14, 12, 11];
@@ -580,14 +635,14 @@ function timingQuality(offset) {
         return targetPoint(pick([20, 19, 18, 17, 16, 15, 14, 13]), "single");
     }
 
-    function botTimingOffsets(player) {
+    function botTimingOffsets(player: DartPlayer): { x: number; y: number } {
         const difficulty = state.match ? state.match.difficulty : state.difficulty;
         const base = difficulty === "easy" ? 0.055 : difficulty === "hard" ? 0.018 : 0.035;
         const sigma = base * (1 + player.drinks * 0.18);
         return { x: gauss() * sigma, y: gauss() * sigma };
     }
 
-    function eventPoint(event) {
+    function eventPoint(event: PointerEvent): Point {
         const rect = dom.board.getBoundingClientRect();
         let px;
         let py;
@@ -604,8 +659,8 @@ function timingQuality(offset) {
         return { x: (px - view.cx) / view.R, y: (py - view.cy) / view.R };
     }
 
-    function landingPoint(aim, drinks, baseSigma) {
-        const sigma = adjustSigma(baseSigma || DRUNK[0].sigma, drinks);
+    function landingPoint(aim: Point, drinks: number, baseSigma: number): Point {
+        const sigma = adjustSigma(baseSigma || DRUNK[0]!.sigma, drinks);
         let x = aim.x + gauss() * sigma;
         let y = aim.y + gauss() * sigma;
         const bigSlip = 0.06 + drinks * 0.04;
@@ -621,7 +676,7 @@ function timingQuality(offset) {
     // ============================================================
     // Canvas overlay drawing
     // ============================================================
-    function addPopup(nx, ny, text, color) {
+    function addPopup(nx: number, ny: number, text: string, color: string): void {
         popups.push({
             x: nx,
             y: ny,
@@ -632,7 +687,7 @@ function timingQuality(offset) {
         });
     }
 
-    function drawDart(ctx, nx, ny, color, slide, isP2) {
+    function drawDart(ctx: CanvasRenderingContext2D, nx: number, ny: number, color: string, slide: number, isP2: boolean): void {
         const x = view.cx + nx * view.R;
         const y = view.cy + ny * view.R + (slide || 0);
         ctx.save();
@@ -678,9 +733,10 @@ function timingQuality(offset) {
         ctx.restore();
     }
 
-    function drawPopups(ctx, dt) {
+    function drawPopups(ctx: CanvasRenderingContext2D, dt: number): void {
         for (let i = popups.length - 1; i >= 0; i -= 1) {
             const popup = popups[i];
+            if (!popup) continue;
             popup.age += dt;
             if (popup.age >= popup.life) {
                 popups.splice(i, 1);
@@ -703,24 +759,24 @@ function timingQuality(offset) {
         }
     }
 
-    function currentAim() {
+    function currentAim(): Point | null {
         if (input.keyboard) return input.keyboard;
         if (input.hover) return input.hover;
         return null;
     }
 
-    function effectsReduced() {
+    function effectsReduced(): boolean {
         return state.settings.reducedEffects || reducedMotionQuery.matches;
     }
 
-    function visualDrunkLevel() {
+    function visualDrunkLevel(): number {
         const match = state.match;
         if (!match) return 0;
         if (match.phase === "drink" && match.lastLosers) {
             let level = 0;
             for (const index of match.lastLosers) {
                 const player = match.players[index];
-                if (!player.isBot) level = Math.max(level, Math.min(4, player.drinks));
+                if (player && !player.isBot) level = Math.max(level, Math.min(4, player.drinks));
             }
             return level;
         }
@@ -729,8 +785,8 @@ function timingQuality(offset) {
         return Math.min(4, active.drinks);
     }
 
-    function drawReticle(ctx, aim, drinks, time, color) {
-        const sway = DRUNK[drinks].sway;
+    function drawReticle(ctx: CanvasRenderingContext2D, aim: Point, drinks: number, time: number, color: string): void {
+        const sway = DRUNK[drinks]!.sway;
         const amp = sway * 0.0032;
         const sx = Math.sin(time / 430) * amp;
         const sy = Math.cos(time / 370) * amp * 0.7;
@@ -769,7 +825,7 @@ function timingQuality(offset) {
         ctx.restore();
     }
 
-    function updateTimingVisual(now) {
+    function updateTimingVisual(now: number): void {
         const match = state.match;
         const timing = match && match.timing;
         if (!match || match.phase !== "timing" || !timing || !dom.timingUi) {
@@ -782,38 +838,57 @@ function timingQuality(offset) {
         const period = timingPeriod(player.drinks);
         const frameNow = state.paused ? state.pausedAt : now;
 
+        let stage: "h" | "v" | "none" = "none";
         if (timing.stage === "horizontal") {
             timing.horizontal.pos = timingPosition(timing.horizontal.start, frameNow, period);
             timing.horizontal.marker = timing.horizontal.pos;
-            dom.timingH.classList.add("active");
-            dom.timingV.classList.remove("active");
-            dom.timingCaption.textContent = state.paused ? "Timing paused" : "Stop the horizontal bar";
+            stage = "h";
         } else if (timing.stage === "vertical") {
             timing.vertical.pos = timingPosition(timing.vertical.start, frameNow, period * 0.86);
             timing.vertical.marker = timing.vertical.pos;
-            dom.timingH.classList.remove("active");
-            dom.timingV.classList.add("active");
-            dom.timingCaption.textContent = state.paused ? "Timing paused" : "Stop the vertical bar";
-        } else {
-            dom.timingH.classList.remove("active");
-            dom.timingV.classList.remove("active");
-            dom.timingCaption.textContent = "Dart away!";
+            stage = "v";
         }
 
-        dom.timingH.style.setProperty("--timing-pos", String(timing.horizontal.marker));
-        dom.timingV.style.setProperty("--timing-pos", String(timing.vertical.marker));
+        if (stage !== timingStageCache) {
+            dom.timingH.classList.toggle("active", stage === "h");
+            dom.timingV.classList.toggle("active", stage === "v");
+            timingStageCache = stage;
+        }
+
+        const caption = state.paused
+            ? "Timing paused"
+            : stage === "h"
+                ? "Stop the horizontal bar"
+                : stage === "v"
+                    ? "Stop the vertical bar"
+                    : "Dart away!";
+        if (caption !== timingCaptionCache) {
+            dom.timingCaption.textContent = caption;
+            timingCaptionCache = caption;
+        }
+
+        if (timing.horizontal.marker !== timingMarkerCacheH) {
+            dom.timingH.style.setProperty("--timing-pos", String(timing.horizontal.marker));
+            timingMarkerCacheH = timing.horizontal.marker;
+        }
+        if (timing.vertical.marker !== timingMarkerCacheV) {
+            dom.timingV.style.setProperty("--timing-pos", String(timing.vertical.marker));
+            timingMarkerCacheV = timing.vertical.marker;
+        }
     }
 
-    function drawFlight(ctx, now) {
-        const progress = clamp((now - flight.start) / FLIGHT_MS, 0, 1);
+    function drawFlight(ctx: CanvasRenderingContext2D, now: number): void {
+        const activeFlight = flight;
+        if (!activeFlight) return;
+        const progress = clamp((now - activeFlight.start) / FLIGHT_MS, 0, 1);
         const ease = 1 - Math.pow(1 - progress, 3);
-        const x = flight.from.x + (flight.to.x - flight.from.x) * ease;
-        const y = flight.from.y + (flight.to.y - flight.from.y) * ease;
+        const x = activeFlight.from.x + (activeFlight.to.x - activeFlight.from.x) * ease;
+        const y = activeFlight.from.y + (activeFlight.to.y - activeFlight.from.y) * ease;
         const lift = Math.sin(progress * Math.PI) * view.R * 0.05;
-        drawDart(ctx, x, y, flight.color, -lift, flight.isP2);
+        drawDart(ctx, x, y, activeFlight.color, -lift, activeFlight.isP2);
     }
 
-    function renderFrame(now) {
+    function renderFrame(now: number): void {
         const frameNow = state.paused ? state.pausedAt : now;
         const dt = state.paused ? 0 : (lastFrame ? Math.min(64, now - lastFrame) : 16);
         lastFrame = now;
@@ -823,37 +898,52 @@ function timingQuality(offset) {
             return;
         }
 
+        if (state.paused && !forceRender) {
+            rafId = requestAnimationFrame(renderFrame);
+            return;
+        }
+        forceRender = false;
+
         if (dom.ctx && dom.board) {
             if (!boardBuffer || view.size === 0) resizeCanvas();
             if (view.size) {
                 const level = visualDrunkLevel();
                 const reduced = effectsReduced();
-                dom.ctx.clearRect(0, 0, view.size, view.size);
-
-                if (boardBuffer && level >= 3 && !reduced) {
-                    const spread = level >= 4 ? view.size * 0.012 : view.size * 0.008;
-                    const alpha = level >= 4 ? 0.2 : 0.13;
-                    const ghosts = [
-                        [-spread, 0],
-                        [spread, 0],
-                        [0, -spread * 0.65],
-                    ];
-                    for (const offset of ghosts) {
-                        dom.ctx.globalAlpha = alpha;
-                        dom.ctx.drawImage(boardBuffer, offset[0], offset[1], view.size, view.size);
-                    }
-                    dom.ctx.globalAlpha = 1;
-                }
-
-                if (boardBuffer) dom.ctx.drawImage(boardBuffer, 0, 0, view.size, view.size);
-
                 const match = state.match;
-                if (match) {
-                    for (const player of match.players) {
-                        for (const dart of player.darts) {
-                            drawDart(dom.ctx, dart.x, dart.y, player.color, 0, player.index === 1);
+
+                // The board and landed darts are static between throws, so
+                // repaint that layer only when something actually changes.
+                if (boardDirty || level !== sceneLevel || reduced !== sceneReduced) {
+                    dom.ctx.clearRect(0, 0, view.size, view.size);
+
+                    if (boardBuffer && level >= 3 && !reduced) {
+                        const spread = level >= 4 ? view.size * 0.012 : view.size * 0.008;
+                        const alpha = level >= 4 ? 0.2 : 0.13;
+                        const ghosts: [number, number][] = [
+                            [-spread, 0],
+                            [spread, 0],
+                            [0, -spread * 0.65],
+                        ];
+                        for (const offset of ghosts) {
+                            dom.ctx.globalAlpha = alpha;
+                            dom.ctx.drawImage(boardBuffer, offset[0], offset[1], view.size, view.size);
+                        }
+                        dom.ctx.globalAlpha = 1;
+                    }
+
+                    if (boardBuffer) dom.ctx.drawImage(boardBuffer, 0, 0, view.size, view.size);
+
+                    if (match) {
+                        for (const player of match.players) {
+                            for (const dart of player.darts) {
+                                drawDart(dom.ctx, dart.x, dart.y, player.color, 0, player.index === 1);
+                            }
                         }
                     }
+
+                    sceneLevel = level;
+                    sceneReduced = reduced;
+                    boardDirty = false;
                 }
 
                 dom.fxCtx.clearRect(0, 0, view.size, view.size);
@@ -899,7 +989,7 @@ function timingQuality(offset) {
     // ============================================================
     // Match engine
     // ============================================================
-    function showScreen(name) {
+    function showScreen(name: "lobby" | "match"): void {
         state.screen = name;
         dom.screenLobby.classList.toggle("active", name === "lobby");
         dom.screenMatch.classList.toggle("active", name === "match");
@@ -910,22 +1000,22 @@ function timingQuality(offset) {
         }
     }
 
-    function hideOverlays() {
+    function hideOverlays(): void {
         for (const overlay of [dom.startOverlay, dom.passOverlay, dom.roundOverlay, dom.endOverlay, dom.quitOverlay]) {
             overlay.classList.add("hidden");
         }
     }
 
-    function updateMuteButtons() {
-        const muted = state.settings.muted;
+    function updateMuteButtons(): void {
+        const enabled = !state.settings.muted;
         for (const button of [dom.lobbyMute, dom.matchMute]) {
-            button.setAttribute("aria-pressed", String(muted));
-            const label = button.querySelector(".chip-label");
-            if (label) label.textContent = muted ? "Sound off" : "Sound on";
+            button.setAttribute("aria-pressed", String(enabled));
+            button.setAttribute("aria-label", enabled ? "Sound on" : "Sound off");
+            button.setAttribute("title", enabled ? "Sound on" : "Sound off");
         }
     }
 
-    function startMatch() {
+    function startMatch(): void {
         ensureAudio();
         clearTimers();
         hideOverlays();
@@ -933,7 +1023,7 @@ function timingQuality(offset) {
         state.pendingResume = false;
         sfx("click");
         const difficulty = state.difficulty;
-        state.match = {
+        const match: DartsMatch = {
             mode: state.mode,
             difficulty,
             round: 1,
@@ -971,6 +1061,7 @@ function timingQuality(offset) {
             lockedAim: null,
             timing: null,
         };
+        state.match = match;
 
         flight = null;
         botPlan = null;
@@ -978,9 +1069,10 @@ function timingQuality(offset) {
         input.pointer = null;
         input.hover = null;
         input.keyboard = null;
+        boardDirty = true;
 
         for (let i = 0; i < 2; i += 1) {
-            dom.names[i].textContent = state.match.players[i].name;
+            dom.names[i]!.textContent = match.players[i]!.name;
         }
         updateMuteButtons();
         updateScoreboard();
@@ -992,7 +1084,7 @@ function timingQuality(offset) {
         });
     }
 
-    function showStartToast() {
+    function showStartToast(): void {
         const match = state.match;
         if (!match) return;
         match.phase = "toast";
@@ -1002,7 +1094,7 @@ function timingQuality(offset) {
         sfx("click");
     }
 
-    function dismissStartToast() {
+    function dismissStartToast(): void {
         const match = state.match;
         if (!match || match.phase !== "toast") return;
         dom.startOverlay.classList.add("hidden");
@@ -1010,7 +1102,7 @@ function timingQuality(offset) {
         startRound();
     }
 
-    function startRound() {
+    function startRound(): void {
         const match = state.match;
         if (!match) return;
         clearTimers();
@@ -1031,13 +1123,14 @@ function timingQuality(offset) {
             player.roundScore = 0;
             player.darts = [];
         }
+        boardDirty = true;
 
         updateScoreboard();
         updateDrunkVisuals();
         beginTurn();
     }
 
-    function beginTurn() {
+    function beginTurn(): void {
         const match = state.match;
         if (!match) return;
         const player = match.players[match.active];
@@ -1075,8 +1168,9 @@ function timingQuality(offset) {
         focusBoard();
     }
 
-    function showPassOverlay(player) {
+    function showPassOverlay(player: DartPlayer): void {
         const match = state.match;
+        if (!match) return;
         match.phase = "pass";
         dom.passKicker.textContent = "Round " + match.round;
         dom.passTitle.textContent = player.name + ", take the board.";
@@ -1089,10 +1183,10 @@ function timingQuality(offset) {
         dom.passContinue.focus();
     }
 
-    function beginThrow(aim, player) {
+    function beginThrow(aim: Point, player: DartPlayer): void {
         const match = state.match;
         if (!match || flight) return;
-        const baseSigma = player.isBot ? DIFFICULTY[match.difficulty].baseSigma : DRUNK[0].sigma;
+        const baseSigma = player.isBot ? DIFFICULTY[match.difficulty].baseSigma : DRUNK[0]!.sigma;
         const to = landingPoint(aim, player.drinks, baseSigma);
         match.phase = "flight";
         botPlan = null;
@@ -1108,7 +1202,7 @@ function timingQuality(offset) {
         updateHud();
     }
 
-    function lockHumanAim(aim) {
+    function lockHumanAim(aim: Point): void {
         const match = state.match;
         if (!match || match.phase !== "aim" || flight || !aim) return;
         const player = match.players[match.active];
@@ -1132,15 +1226,15 @@ function timingQuality(offset) {
         announce("Aim locked. Stop the horizontal bar.");
     }
 
-    function applyTimingFeedback(track, offset) {
+    function applyTimingFeedback(track: HTMLElement, offset: number): void {
         track.classList.remove("perfect", "good", "off");
         track.classList.add(timingQuality(offset));
         sfx(timingQuality(offset) === "off" ? "sting" : "tick");
     }
 
-    function stopTiming() {
+    function stopTiming(): void {
         const match = state.match;
-        if (!match || match.phase !== "timing" || !match.timing) return;
+        if (!match || match.phase !== "timing" || !match.timing || !match.lockedAim) return;
         const timing = match.timing;
         const player = match.players[match.active];
         const now = performance.now();
@@ -1171,7 +1265,7 @@ function timingQuality(offset) {
                 x: match.lockedAim.x + (timing.horizontal.offset || 0) * TIMING_MAX_OFFSET,
                 y: match.lockedAim.y + (timing.vertical.offset || 0) * TIMING_MAX_OFFSET,
             };
-            const quality = timingQuality((timing.horizontal.offset + timing.vertical.offset) / 2);
+            const quality = timingQuality(((timing.horizontal.offset || 0) + (timing.vertical.offset || 0)) / 2);
             announce("Vertical bar stopped. " + quality.toUpperCase() + " timing.");
             updateHud();
             updateTimingVisual(now);
@@ -1182,22 +1276,23 @@ function timingQuality(offset) {
         }
     }
 
-    function scheduleBotThrow() {
+    function scheduleBotThrow(): void {
         const match = state.match;
         if (!match || !botPlan) return;
         later(() => {
             if (!state.match || state.match !== match || match.phase !== "aim") return;
             const player = match.players[match.active];
-            if (!player.isBot || !botPlan) return;
+            const plan = botPlan;
+            if (!player.isBot || !plan) return;
             const offsets = botTimingOffsets(player);
             beginThrow({
-                x: botPlan.aim.x + offsets.x,
-                y: botPlan.aim.y + offsets.y,
+                x: plan.aim.x + offsets.x,
+                y: plan.aim.y + offsets.y,
             }, player);
         }, 760);
     }
 
-    function resolveThrow(finished) {
+    function resolveThrow(finished: Flight): void {
         const match = state.match;
         if (!match) return;
         const player = match.players[finished.player];
@@ -1209,6 +1304,7 @@ function timingQuality(offset) {
             score: result.score,
             label: result.label,
         });
+        boardDirty = true;
         player.roundScore += result.score;
         player.total += result.score;
         player.dartsThrown += 1;
@@ -1244,13 +1340,13 @@ function timingQuality(offset) {
         }
     }
 
-    function endTurn() {
+    function endTurn(): void {
         const match = state.match;
         if (!match) return;
         match.turnsTaken += 1;
 
         if (match.turnsTaken === 1) {
-            match.active = 1 - match.starter;
+            match.active = (1 - match.starter) as 0 | 1;
             beginTurn();
             return;
         }
@@ -1259,8 +1355,9 @@ function timingQuality(offset) {
         computeRound();
     }
 
-    function computeRound() {
+    function computeRound(): void {
         const match = state.match;
+        if (!match) return;
         const p1 = match.players[0];
         const p2 = match.players[1];
         let losers;
@@ -1285,7 +1382,7 @@ function timingQuality(offset) {
             else if (p2.total > p1.total) match.winner = 1;
             else match.winner = -1;
         } else if (blacked.length === 1) {
-            match.winner = blacked[0].index === 0 ? 1 : 0;
+            match.winner = blacked[0]!.index === 0 ? 1 : 0;
         } else {
             match.winner = null;
         }
@@ -1300,8 +1397,9 @@ function timingQuality(offset) {
         showRoundOverlay(losers);
     }
 
-    function showRoundOverlay(losers) {
+    function showRoundOverlay(losers: DartPlayer[]): void {
         const match = state.match;
+        if (!match) return;
         const p1 = match.players[0];
         const p2 = match.players[1];
 
@@ -1315,16 +1413,17 @@ function timingQuality(offset) {
             dom.roundTitle.textContent = "Dead even.";
             dom.roundSub.textContent = "Both players drink. The board gets blurrier.";
         } else {
-            const winner = losers[0].index === 0 ? p2 : p1;
+            const loser = losers[0]!;
+            const winner = loser.index === 0 ? p2 : p1;
             dom.roundTitle.textContent = winner.name + " takes it.";
-            dom.roundSub.textContent = losers[0].name + " drinks.";
+            dom.roundSub.textContent = loser.name + " drinks.";
         }
 
         dom.drinkRow.innerHTML = "";
         for (const player of losers) {
             const tag = document.createElement("span");
             tag.className = "drink-tag";
-            tag.textContent = player.name + " +1 " + DRUNK[player.drinks].label;
+            tag.textContent = player.name + " +1 " + DRUNK[player.drinks]!.label;
             dom.drinkRow.appendChild(tag);
         }
 
@@ -1338,34 +1437,35 @@ function timingQuality(offset) {
         );
     }
 
-    function makeKeyHint() {
+    function makeKeyHint(): HTMLElement {
         const hint = document.createElement("span");
         hint.className = "key-hint";
         hint.textContent = "Enter";
         return hint;
     }
 
-    function updateEffects() {
-        document.getElementById("app").classList.toggle(
+    function updateEffects(): void {
+        byId("app").classList.toggle(
             "reduced",
             state.settings.reducedEffects || reducedMotionQuery.matches
         );
         dom.effectsToggle.setAttribute("aria-pressed", String(state.settings.reducedEffects));
     }
 
-    function updateDrunkVisuals() {
+    function updateDrunkVisuals(): void {
         const match = state.match;
         const level = visualDrunkLevel();
         const active = match ? match.players[match.active] : null;
-        const botTurn = Boolean(active && active.isBot && match.phase !== "drink");
+        const botTurn = Boolean(active && active.isBot && match && match.phase !== "drink");
 
         dom.boardStage.classList.remove("drunk-0", "drunk-1", "drunk-2", "drunk-3", "drunk-4");
         dom.boardStage.classList.add("drunk-" + level);
         dom.boardStage.classList.toggle("bot-turn", botTurn);
     }
 
-    function updateSips(index, player) {
+    function updateSips(index: number, player: DartPlayer): void {
         const meter = dom.sips[index];
+        if (!meter) return;
         meter.innerHTML = "";
         for (let i = 0; i < DRINK_LIMIT; i += 1) {
             const pip = document.createElement("span");
@@ -1380,30 +1480,30 @@ function timingQuality(offset) {
         );
     }
 
-    function updateScoreboard() {
+    function updateScoreboard(): void {
         const match = state.match;
         if (!match) return;
         const turnPhases = ["turnStart", "pass", "aim", "timing", "flight"];
 
         for (let i = 0; i < 2; i += 1) {
-            const player = match.players[i];
-            dom.names[i].textContent = player.name;
-            dom.totals[i].textContent = String(player.total);
-            dom.roundScores[i].textContent = String(player.roundScore);
-            dom.panels[i].classList.toggle(
+            const player = match.players[i]!;
+            dom.names[i]!.textContent = player.name;
+            dom.totals[i]!.textContent = String(player.total);
+            dom.roundScores[i]!.textContent = String(player.roundScore);
+            dom.panels[i]!.classList.toggle(
                 "active",
                 match.active === i && turnPhases.indexOf(match.phase) !== -1
             );
-            dom.panels[i].classList.toggle(
+            dom.panels[i]!.classList.toggle(
                 "dim",
                 match.active !== i && turnPhases.indexOf(match.phase) !== -1
             );
-            dom.turnChips[i].hidden = !(match.active === i && turnPhases.indexOf(match.phase) !== -1);
+            dom.turnChips[i]!.hidden = !(match.active === i && turnPhases.indexOf(match.phase) !== -1);
             updateSips(i, player);
         }
     }
 
-    function updateHud() {
+    function updateHud(): void {
         const match = state.match;
         if (!match) return;
         const player = match.players[match.active];
@@ -1485,7 +1585,7 @@ function timingQuality(offset) {
         );
     }
 
-    function recordMatch() {
+    function recordMatch(): void {
         const match = state.match;
         if (!match || match.recorded) return;
         match.recorded = true;
@@ -1513,9 +1613,11 @@ function timingQuality(offset) {
         renderRecords();
     }
 
-    function showEnd() {
+    function showEnd(): void {
         const match = state.match;
         if (!match) return;
+        const winnerIndex = match.winner;
+        if (winnerIndex === null) return;
         clearTimers();
         recordMatch();
         match.phase = "end";
@@ -1526,14 +1628,14 @@ function timingQuality(offset) {
         const p1 = match.players[0];
         const p2 = match.players[1];
 
-        if (match.winner === -1) {
+        if (winnerIndex === -1) {
             dom.endKicker.textContent = "Double blackout";
             dom.endTitle.textContent = "Draw.";
             dom.endSub.textContent = "Both players blacked out on the same round with the same total.";
             sfx("sting");
         } else {
-            const winner = match.players[match.winner];
-            const loser = match.players[1 - match.winner];
+            const winner = match.players[winnerIndex]!;
+            const loser = match.players[1 - winnerIndex]!;
             dom.endKicker.textContent = "Blackout";
             dom.endTitle.textContent = winner.name + " wins.";
             if (match.blacked.length === 2) {
@@ -1560,7 +1662,7 @@ function timingQuality(offset) {
         announce(dom.endTitle.textContent + " " + dom.endSub.textContent);
     }
 
-    function renderRecords() {
+    function renderRecords(): void {
         const solo = state.records.solo[state.difficulty];
         if (state.mode === "solo") {
             let text = DIFFICULTY[state.difficulty].name + ": " + solo.wins + "W / " + solo.losses + "L";
@@ -1576,7 +1678,7 @@ function timingQuality(offset) {
         }
     }
 
-    function goLobby() {
+    function goLobby(): void {
         clearTimers();
         flight = null;
         botPlan = null;
@@ -1594,7 +1696,7 @@ function timingQuality(offset) {
         sfx("click");
     }
 
-    function resumeTurn() {
+    function resumeTurn(): void {
         const match = state.match;
         if (!match) return;
         const player = match.players[match.active];
@@ -1620,19 +1722,19 @@ function timingQuality(offset) {
         }
     }
 
-    function resumeFromOverlay() {
-        if (!state.match) return;
+    function resumeFromOverlay(): void {
+        const match = state.match;
+        if (!match) return;
         const pausedFor = performance.now() - state.pausedAt;
         if (flight) flight.start += pausedFor;
-        const match = state.match;
-        if (match && match.timing) {
+        if (match.timing) {
             if (match.timing.stage === "horizontal") match.timing.horizontal.start += pausedFor;
             if (match.timing.stage === "vertical") match.timing.vertical.start += pausedFor;
         }
         state.paused = false;
         state.pendingResume = false;
         resumeTurn();
-        if (state.match.phase === "aim" && !state.match.players[state.match.active].isBot) {
+        if (match.phase === "aim" && !match.players[match.active].isBot) {
             focusBoard();
         }
     }
@@ -1640,7 +1742,7 @@ function timingQuality(offset) {
     // ============================================================
     // UI, input & boot
     // ============================================================
-    function selectMode(mode) {
+    function selectMode(mode: string): void {
         state.mode = mode === "duo" ? "duo" : "solo";
         for (const card of dom.modeCards) {
             const selected = card.dataset.mode === state.mode;
@@ -1652,8 +1754,8 @@ function timingQuality(offset) {
         sfx("click");
     }
 
-    function selectDifficulty(difficulty) {
-        if (!DIFFICULTY[difficulty]) return;
+    function selectDifficulty(difficulty: string): void {
+        if (difficulty !== "easy" && difficulty !== "normal" && difficulty !== "hard") return;
         state.difficulty = difficulty;
         for (const button of dom.difficultyButtons) {
             const selected = button.dataset.difficulty === difficulty;
@@ -1664,9 +1766,9 @@ function timingQuality(offset) {
         sfx("click");
     }
 
-    function toggleMute() {
+    function toggleMute(): void {
         state.settings.muted = !state.settings.muted;
-        audio.muted = state.settings.muted;
+        sfxEngine.setMuted(state.settings.muted);
         saveSettings();
         updateMuteButtons();
         if (!state.settings.muted) {
@@ -1675,14 +1777,14 @@ function timingQuality(offset) {
         }
     }
 
-    function toggleEffects() {
+    function toggleEffects(): void {
         state.settings.reducedEffects = !state.settings.reducedEffects;
         saveSettings();
         updateEffects();
         sfx("click");
     }
 
-    function resetRecords() {
+    function resetRecords(): void {
         if (!window.confirm("Reset all records? This cannot be undone.")) return;
         state.records = {
             solo: { easy: makeRecord(), normal: makeRecord(), hard: makeRecord() },
@@ -1694,12 +1796,12 @@ function timingQuality(offset) {
         sfx("click");
     }
 
-    function bindEvents() {
+    function bindEvents(): void {
         for (const card of dom.modeCards) {
-            card.addEventListener("click", () => selectMode(card.dataset.mode));
+            card.addEventListener("click", () => selectMode(card.dataset.mode ?? ""));
         }
         for (const button of dom.difficultyButtons) {
-            button.addEventListener("click", () => selectDifficulty(button.dataset.difficulty));
+            button.addEventListener("click", () => selectDifficulty(button.dataset.difficulty ?? ""));
         }
 
         dom.startBtn.addEventListener("click", startMatch);
@@ -1733,7 +1835,7 @@ function timingQuality(offset) {
             }
             dom.roundOverlay.classList.add("hidden");
             match.round += 1;
-            match.starter = 1 - match.starter;
+            match.starter = (1 - match.starter) as 0 | 1;
             startRound();
         });
 
@@ -1749,7 +1851,7 @@ function timingQuality(offset) {
         bindViewport();
     }
 
-    function openQuit() {
+    function openQuit(): void {
         if (!state.match) return;
         state.paused = true;
         state.pausedAt = performance.now();
@@ -1758,14 +1860,14 @@ function timingQuality(offset) {
         sfx("click");
     }
 
-    function cancelQuit() {
+    function cancelQuit(): void {
         dom.quitOverlay.classList.add("hidden");
         resumeFromOverlay();
         focusBoard();
         sfx("click");
     }
 
-    function updateTouchAim(event) {
+    function updateTouchAim(event: PointerEvent): Point {
         const point = eventPoint(event);
         drag.point = point;
         input.pointer = point;
@@ -1775,7 +1877,7 @@ function timingQuality(offset) {
         return point;
     }
 
-    function releasePointer(pointerId) {
+    function releasePointer(pointerId: number): void {
         try {
             if (dom.board.hasPointerCapture && dom.board.hasPointerCapture(pointerId)) {
                 dom.board.releasePointerCapture(pointerId);
@@ -1783,7 +1885,7 @@ function timingQuality(offset) {
         } catch (err) { /* pointer capture unavailable */ }
     }
 
-    function bindBoardInput() {
+    function bindBoardInput(): void {
         dom.board.addEventListener("pointermove", (event) => {
             if (state.screen !== "match") return;
 
@@ -1846,7 +1948,7 @@ function timingQuality(offset) {
 
         dom.board.addEventListener("pointerup", (event) => {
             if (!drag.active || event.pointerId !== drag.pointerId) return;
-            const pointerId = drag.pointerId;
+            const pointerId = drag.pointerId!;
             const point = drag.point || eventPoint(event);
             drag.active = false;
             drag.pointerId = null;
@@ -1863,7 +1965,7 @@ function timingQuality(offset) {
 
         dom.board.addEventListener("pointercancel", (event) => {
             if (!drag.active || event.pointerId !== drag.pointerId) return;
-            const pointerId = drag.pointerId;
+            const pointerId = drag.pointerId!;
             drag.active = false;
             drag.pointerId = null;
             drag.point = null;
@@ -1875,16 +1977,16 @@ function timingQuality(offset) {
         dom.board.addEventListener("contextmenu", (event) => event.preventDefault());
     }
 
-    function overlayVisible(element) {
-        return element && !element.classList.contains("hidden");
+    function overlayVisible(element: HTMLElement | null): boolean {
+        return element !== null && !element.classList.contains("hidden");
     }
 
-    function bindKeyboard() {
+    function bindKeyboard(): void {
         document.addEventListener("keydown", (event) => {
             const key = event.key;
             const nativeActivation = (key === "Enter" || key === " ") &&
-                event.target && event.target.closest &&
-                event.target.closest("button, a");
+                event.target instanceof Element &&
+                Boolean(event.target.closest("button, a"));
 
             if (overlayVisible(dom.endOverlay)) {
                 if ((key === "Enter" || key === " ") && !nativeActivation) {
@@ -2000,9 +2102,12 @@ function timingQuality(offset) {
         });
     }
 
-    function bindViewport() {
+    function bindViewport(): void {
         window.addEventListener("resize", () => {
-            if (state.screen === "match") resizeCanvas();
+            if (state.screen === "match") {
+                resizeCanvas();
+                forceRender = true;
+            }
         });
 
         document.addEventListener("visibilitychange", () => {
@@ -2034,7 +2139,7 @@ function timingQuality(offset) {
         }
     }
 
-    function init() {
+    function init(): void {
         cacheDom();
         if (!dom.board) return;
         updateMuteButtons();
@@ -2049,4 +2154,15 @@ function timingQuality(offset) {
     } else {
         init();
     }
-})();
+
+    if (import.meta.hot) {
+        import.meta.hot.dispose(() => {
+            if (state.match) {
+                clearTimers();
+                cancelAnimationFrame(rafId);
+            }
+        });
+        import.meta.hot.accept(() => {
+            location.reload();
+        });
+    }

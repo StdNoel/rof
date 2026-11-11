@@ -224,6 +224,52 @@ kbd {
     border-color: var(--line-strong);
 }
 
+.sound-btn {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: 50%;
+    background: var(--panel);
+    color: var(--muted);
+    transition: color 0.18s ease, border-color 0.18s ease, opacity 0.18s ease;
+}
+
+.sound-btn:hover {
+    color: var(--amber);
+    border-color: var(--line-strong);
+}
+
+.sound-btn .sound-icon {
+    width: 20px;
+    height: 20px;
+    display: block;
+}
+
+.sound-btn .sound-wave,
+.sound-btn .sound-slash {
+    transition: opacity 0.15s ease;
+}
+
+.sound-btn .sound-slash {
+    opacity: 0;
+}
+
+.sound-btn[aria-pressed="false"] {
+    opacity: 0.65;
+}
+
+.sound-btn[aria-pressed="false"] .sound-wave {
+    opacity: 0;
+}
+
+.sound-btn[aria-pressed="false"] .sound-slash {
+    opacity: 1;
+}
+
 .chip-dot {
     width: 7px;
     height: 7px;
@@ -234,13 +280,8 @@ kbd {
 }
 
 .chip-btn[aria-pressed="true"] .chip-dot {
-    background: var(--muted);
-    box-shadow: none;
-}
-
-.chip-btn[aria-pressed="true"] .chip-label {
-    text-decoration: line-through;
-    opacity: 0.7;
+    background: var(--red);
+    box-shadow: 0 0 8px var(--red);
 }
 
 /* ===== Lobby hero ===== */
@@ -909,21 +950,12 @@ kbd {
         0 0 0 1px rgba(255, 179, 71, 0.28),
         0 0 46px rgba(255, 150, 40, 0.16),
         0 26px 60px rgba(0, 0, 0, 0.62);
+    filter: blur(var(--drunk-blur));
+    transition: filter 0.55s ease;
 }
 
 .board-stage.bot-turn #board {
     cursor: default;
-}
-
-.drunk-blur {
-    position: absolute;
-    inset: 0;
-    z-index: 1;
-    border-radius: 50%;
-    pointer-events: none;
-    backdrop-filter: blur(var(--drunk-blur));
-    -webkit-backdrop-filter: blur(var(--drunk-blur));
-    transition: backdrop-filter 0.55s ease, -webkit-backdrop-filter 0.55s ease;
 }
 
 .drunk-overlay {
@@ -1378,9 +1410,8 @@ kbd {
     animation: none !important;
 }
 
-#app.reduced .drunk-blur {
-    backdrop-filter: blur(1px) !important;
-    -webkit-backdrop-filter: blur(1px) !important;
+#app.reduced #board {
+    filter: blur(1px) !important;
 }
 
 #app.reduced .drunk-overlay {
@@ -1418,11 +1449,6 @@ kbd {
     .board-stage {
         --drunk-blur: 1px !important;
         --timing-blur: 0px !important;
-    }
-
-    .drunk-blur {
-        backdrop-filter: blur(1px) !important;
-        -webkit-backdrop-filter: blur(1px) !important;
     }
 
     .timing-track {

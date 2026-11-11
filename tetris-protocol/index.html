@@ -1,353 +1,393 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-
-<head>
+  <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#191a1b" />
     <title>Tetris Protocol &middot; Overload</title>
-    <link rel="icon" href="data:," />
     <link rel="stylesheet" href="tetris.css" />
-</head>
+    <link rel="icon" type="image/svg+xml" href="/favicon-tetris.ico" />
+  </head>
 
-<body>
+  <body>
     <div id="app">
-        <!-- ===== LOBBY ===== -->
-        <section id="screen-lobby" class="screen active">
-            <header class="topbar">
-                <a class="back-link" href="../minigames/" aria-label="Back to Minigames">
-                    <span aria-hidden="true">&larr;</span>
-                    <span class="back-label">Minigames</span>
-                </a>
-                <div class="brand" aria-label="Tetris Protocol">
-                    <span class="brand-main">TETRIS</span>
-                    <span class="brand-sub">PROTOCOL</span>
+      <!-- ===== LOBBY ===== -->
+      <section id="screen-lobby" class="screen active">
+        <header class="topbar">
+          <a class="back-link" href="../minigames/" aria-label="Back to Minigames">
+            <span aria-hidden="true">&larr;</span>
+            <span class="back-label">Minigames</span>
+          </a>
+          <div class="brand" aria-label="Tetris Protocol">
+            <span class="brand-main">TETRIS</span>
+            <span class="brand-sub">PROTOCOL</span>
+          </div>
+          <button
+            id="lobby-mute"
+            class="sound-btn"
+            type="button"
+            aria-label="Sound on"
+            aria-pressed="true"
+            title="Sound on"
+          >
+            <svg class="sound-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor" />
+              <path
+                class="sound-wave"
+                d="M16 8.5a5 5 0 0 1 0 7"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+              />
+              <path
+                class="sound-slash"
+                d="M4 4l16 16"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+              />
+            </svg>
+          </button>
+        </header>
+
+        <div class="lobby-main">
+          <div class="hero">
+            <p class="tagline">A neon-grid data drop</p>
+            <h1 class="lobby-title">Compile.<br /><span>Survive the heat.</span></h1>
+            <p class="lobby-sub">
+              Stack data packets, clear corrupted rows, and keep the firewall from consuming the core. The higher you
+              stack, the hotter the system runs.
+            </p>
+          </div>
+
+          <div class="setup-grid">
+            <section class="panel setup-panel" aria-labelledby="setup-title">
+              <h2 class="panel-title" id="setup-title">Protocol setup</h2>
+
+              <div class="field">
+                <span class="field-label">Mode</span>
+                <div class="mode-cards" role="radiogroup" aria-label="Game mode">
+                  <button class="mode-card selected" type="button" data-mode="solo" role="radio" aria-checked="true">
+                    <span class="mode-icon" aria-hidden="true">1P</span>
+                    <span class="mode-name">Solo vs Firewall</span>
+                    <span class="mode-desc">Hold back the breach.</span>
+                  </button>
+                  <button class="mode-card" type="button" data-mode="duo" role="radio" aria-checked="false">
+                    <span class="mode-icon" aria-hidden="true">2P</span>
+                    <span class="mode-name">2 Players</span>
+                    <span class="mode-desc">Local split-screen.</span>
+                  </button>
                 </div>
-                <button id="lobby-mute" class="chip-btn" type="button" aria-pressed="false">
-                    <span class="chip-dot" aria-hidden="true"></span>
-                    <span class="chip-label">Sound on</span>
+              </div>
+
+              <div class="field">
+                <span class="field-label">Pressure</span>
+                <div class="segmented" role="radiogroup" aria-label="System pressure">
+                  <button type="button" data-pressure="chill" role="radio" aria-checked="false">Chill</button>
+                  <button type="button" data-pressure="standard" role="radio" aria-checked="true" class="selected">
+                    Standard
+                  </button>
+                  <button type="button" data-pressure="critical" role="radio" aria-checked="false">Critical</button>
+                </div>
+              </div>
+
+              <div class="field">
+                <span class="field-label">Accessibility</span>
+                <button id="effects-toggle" class="toggle-row" type="button" aria-pressed="false">
+                  <span class="toggle-text">
+                    <b>Reduce glitch effects</b>
+                    <small>Removes shake, blur, and chromatic glitches.</small>
+                  </span>
+                  <span class="toggle" aria-hidden="true"></span>
                 </button>
-            </header>
+              </div>
 
-            <div class="lobby-main">
-                <div class="hero">
-                    <p class="tagline">A neon-grid data drop</p>
-                    <h1 class="lobby-title">Compile.<br /><span>Survive the heat.</span></h1>
-                    <p class="lobby-sub">
-                        Stack data packets, clear corrupted rows, and keep the firewall
-                        from consuming the core. The higher you stack, the hotter the
-                        system runs.
-                    </p>
+              <div class="field">
+                <span class="field-label" id="binds-label">Key binds</span>
+                <div class="bind-grid" id="bind-grid" role="group" aria-labelledby="binds-label"></div>
+                <p class="bind-hint">Player 1 / Solo. Select a key, then press a new one. <kbd>Esc</kbd> cancels.</p>
+                <p class="bind-warning" id="bind-warning" role="alert"></p>
+              </div>
+
+              <button id="start-btn" class="primary start-btn" type="button">
+                Boot Protocol <span class="key-hint">Enter</span>
+              </button>
+
+              <div class="records-line" id="records-line">No records yet.</div>
+              <button id="reset-records" class="ghost small" type="button">Reset records</button>
+            </section>
+
+            <section class="panel rules-panel" aria-labelledby="rules-title">
+              <h2 class="panel-title" id="rules-title">System rules</h2>
+              <ol class="rules">
+                <li>
+                  <b>Stack the packets.</b>
+                  <span>Fill complete rows to compile them out. Clears push the firewall back.</span>
+                </li>
+                <li>
+                  <b>Heat is inevitable.</b>
+                  <span
+                    >Lines cleared, a high stack, and slow clears all raise system heat. Higher heat means faster drops
+                    and glitchier visuals.</span
+                  >
+                </li>
+                <li>
+                  <b>Do not breach the ceiling.</b>
+                  <span
+                    >Solo: the firewall reaching the top ends the run. VS: top out and your opponent takes the
+                    match.</span
+                  >
+                </li>
+              </ol>
+
+              <div class="heat-legend">
+                <span class="heat-swatch" aria-hidden="true"></span>
+                <span>Heat 1&ndash;4: chromatic drift, row glitches, corruption rows, and core overload.</span>
+              </div>
+
+              <div class="controls-hint keyboard-hint">
+                <kbd>WASD</kbd> / <kbd>Arrows</kbd> move &middot; <kbd>Q</kbd>/<kbd>Z</kbd> rotate CCW &middot;
+                <kbd>C</kbd> hold &middot; <kbd>Space</kbd> hard drop &middot; <kbd>Esc</kbd> pause
+              </div>
+
+              <div class="controls-hint touch-hint">
+                Each player gets an on-screen pad in the match. Use the HUD pause button to stop the run.
+              </div>
+
+              <p class="disclaimer keyboard-hint">
+                P2 in local VS: arrows move, <kbd>,</kbd> rotate CCW, <kbd>.</kbd> hold, <kbd>Enter</kbd> hard drop.
+              </p>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== MATCH ===== -->
+      <section id="screen-match" class="screen">
+        <header class="match-hud">
+          <button id="quit-btn" class="chip-btn" type="button">
+            <span aria-hidden="true">&larr;</span>
+            <span class="chip-label">Quit</span>
+          </button>
+          <div class="hud-center">
+            <span class="hud-mode" id="hud-mode">Solo vs Firewall</span>
+            <span class="hud-sub" id="hud-sub">Standard pressure</span>
+          </div>
+          <div class="hud-actions">
+            <button id="match-pause" class="chip-btn pause-btn" type="button" aria-label="Pause protocol">
+              <span aria-hidden="true">&#10074;&#10074;</span>
+              <span class="chip-label">Pause</span>
+            </button>
+            <button
+              id="match-mute"
+              class="sound-btn"
+              type="button"
+              aria-label="Sound on"
+              aria-pressed="true"
+              title="Sound on"
+            >
+              <svg class="sound-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor" />
+                <path
+                  class="sound-wave"
+                  d="M16 8.5a5 5 0 0 1 0 7"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                />
+                <path
+                  class="sound-slash"
+                  d="M4 4l16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                />
+              </svg>
+            </button>
+          </div>
+        </header>
+
+        <main class="match-main">
+          <div class="boards-area" id="boards-area">
+            <article class="player-stage p1" id="stage-0" data-player="0">
+              <div class="player-banner">
+                <span class="player-name" id="player-name-0">OPERATOR</span>
+                <span class="player-score" id="score-0">0</span>
+              </div>
+
+              <div class="stage-body">
+                <aside class="side-rail" aria-label="Player 1 piece previews">
+                  <div class="preview-panel">
+                    <span class="preview-label">Hold</span>
+                    <canvas id="hold-0" width="96" height="96" aria-label="Held piece"></canvas>
+                  </div>
+                  <div class="preview-panel">
+                    <span class="preview-label">Next</span>
+                    <canvas id="next-0" width="96" height="216" aria-label="Next pieces"></canvas>
+                  </div>
+                  <div class="stat-row">
+                    <span>Lines</span>
+                    <b id="lines-0">0</b>
+                  </div>
+                  <div class="stat-row">
+                    <span>Heat</span>
+                    <b id="heat-0">0</b>
+                  </div>
+                  <div class="heat-pips" id="heat-pips-0" aria-hidden="true"></div>
+                </aside>
+
+                <div class="playfield-row">
+                  <div class="playfield" id="playfield-0">
+                    <canvas
+                      id="board-0"
+                      tabindex="0"
+                      aria-label="Player 1 data grid. Stack packets and clear rows."
+                    ></canvas>
+                    <div class="scanlines" aria-hidden="true"></div>
+                    <div class="board-flash" id="flash-0" aria-hidden="true"></div>
+                  </div>
+                  <div class="firewall-panel" id="firewall-panel-0">
+                    <span class="firewall-label">Firewall</span>
+                    <canvas id="firewall-0" width="28" height="440" aria-hidden="true"></canvas>
+                    <span class="firewall-pct" id="firewall-pct-0">0%</span>
+                  </div>
                 </div>
+              </div>
 
-                <div class="setup-grid">
-                    <section class="panel setup-panel" aria-labelledby="setup-title">
-                        <h2 class="panel-title" id="setup-title">Protocol setup</h2>
-
-                        <div class="field">
-                            <span class="field-label">Mode</span>
-                            <div class="mode-cards" role="radiogroup" aria-label="Game mode">
-                                <button class="mode-card selected" type="button" data-mode="solo" role="radio"
-                                    aria-checked="true">
-                                    <span class="mode-icon" aria-hidden="true">1P</span>
-                                    <span class="mode-name">Solo vs Firewall</span>
-                                    <span class="mode-desc">Hold back the breach.</span>
-                                </button>
-                                <button class="mode-card" type="button" data-mode="duo" role="radio"
-                                    aria-checked="false">
-                                    <span class="mode-icon" aria-hidden="true">2P</span>
-                                    <span class="mode-name">2 Players</span>
-                                    <span class="mode-desc">Local split-screen.</span>
-                                </button>
-                            </div>
-                        </div>
-
-                        <div class="field">
-                            <span class="field-label">Pressure</span>
-                            <div class="segmented" role="radiogroup" aria-label="System pressure">
-                                <button type="button" data-pressure="chill" role="radio"
-                                    aria-checked="false">Chill</button>
-                                <button type="button" data-pressure="standard" role="radio" aria-checked="true"
-                                    class="selected">Standard</button>
-                                <button type="button" data-pressure="critical" role="radio"
-                                    aria-checked="false">Critical</button>
-                            </div>
-                        </div>
-
-                        <div class="field">
-                            <span class="field-label">Accessibility</span>
-                            <button id="effects-toggle" class="toggle-row" type="button" aria-pressed="false">
-                                <span class="toggle-text">
-                                    <b>Reduce glitch effects</b>
-                                    <small>Removes shake, blur, and chromatic glitches.</small>
-                                </span>
-                                <span class="toggle" aria-hidden="true"></span>
-                            </button>
-                        </div>
-
-                        <div class="field">
-                            <span class="field-label" id="binds-label">Key binds</span>
-                            <div class="bind-grid" id="bind-grid" role="group"
-                                aria-labelledby="binds-label"></div>
-                            <p class="bind-hint">
-                                Player 1 / Solo. Select a key, then press a new one. <kbd>Esc</kbd> cancels.
-                            </p>
-                            <p class="bind-warning" id="bind-warning" role="alert"></p>
-                        </div>
-
-                        <button id="start-btn" class="primary start-btn" type="button">
-                            Boot Protocol <span class="key-hint">Enter</span>
-                        </button>
-
-                        <div class="records-line" id="records-line">No records yet.</div>
-                        <button id="reset-records" class="ghost small" type="button">Reset records</button>
-                    </section>
-
-                    <section class="panel rules-panel" aria-labelledby="rules-title">
-                        <h2 class="panel-title" id="rules-title">System rules</h2>
-                        <ol class="rules">
-                            <li>
-                                <b>Stack the packets.</b>
-                                <span>Fill complete rows to compile them out. Clears push the firewall back.</span>
-                            </li>
-                            <li>
-                                <b>Heat is inevitable.</b>
-                                <span>Lines cleared, a high stack, and slow clears all raise system heat. Higher
-                                    heat means faster drops and glitchier visuals.</span>
-                            </li>
-                            <li>
-                                <b>Do not breach the ceiling.</b>
-                                <span>Solo: the firewall reaching the top ends the run. VS: top out and your
-                                    opponent takes the match.</span>
-                            </li>
-                        </ol>
-
-                        <div class="heat-legend">
-                            <span class="heat-swatch" aria-hidden="true"></span>
-                            <span>Heat 1&ndash;4: chromatic drift, row glitches, corruption rows, and core
-                                overload.</span>
-                        </div>
-
-                        <div class="controls-hint keyboard-hint">
-                            <kbd>WASD</kbd> / <kbd>Arrows</kbd> move &middot;
-                            <kbd>Q</kbd>/<kbd>Z</kbd> rotate CCW &middot;
-                            <kbd>C</kbd> hold &middot;
-                            <kbd>Space</kbd> hard drop &middot;
-                            <kbd>Esc</kbd> pause
-                        </div>
-
-                        <div class="controls-hint touch-hint">
-                            Each player gets an on-screen pad in the match.
-                            Use the HUD pause button to stop the run.
-                        </div>
-
-                        <p class="disclaimer keyboard-hint">
-                            P2 in local VS: arrows move, <kbd>,</kbd> rotate CCW,
-                            <kbd>.</kbd> hold, <kbd>Enter</kbd> hard drop.
-                        </p>
-                    </section>
-                </div>
-            </div>
-        </section>
-
-        <!-- ===== MATCH ===== -->
-        <section id="screen-match" class="screen">
-            <header class="match-hud">
-                <button id="quit-btn" class="chip-btn" type="button">
-                    <span aria-hidden="true">&larr;</span>
-                    <span class="chip-label">Quit</span>
+              <div class="touch-pad" id="pad-0" aria-label="Player 1 touch controls">
+                <button type="button" data-player="0" data-action="left" aria-label="Move left">&larr;</button>
+                <button type="button" data-player="0" data-action="soft" aria-label="Soft drop">&darr;</button>
+                <button type="button" data-player="0" data-action="right" aria-label="Move right">&rarr;</button>
+                <button type="button" data-player="0" data-action="hold" aria-label="Hold piece">HOLD</button>
+                <button type="button" data-player="0" data-action="ccw" aria-label="Rotate counter-clockwise">
+                  &#8634;
                 </button>
-                <div class="hud-center">
-                    <span class="hud-mode" id="hud-mode">Solo vs Firewall</span>
-                    <span class="hud-sub" id="hud-sub">Standard pressure</span>
+                <button type="button" data-player="0" data-action="cw" aria-label="Rotate clockwise">&#8635;</button>
+                <button type="button" data-player="0" data-action="drop" aria-label="Hard drop">DROP</button>
+              </div>
+            </article>
+
+            <article class="player-stage p2 hidden" id="stage-1" data-player="1">
+              <div class="player-banner">
+                <span class="player-name" id="player-name-1">PLAYER 2</span>
+                <span class="player-score" id="score-1">0</span>
+              </div>
+
+              <div class="stage-body">
+                <aside class="side-rail" aria-label="Player 2 piece previews">
+                  <div class="preview-panel">
+                    <span class="preview-label">Hold</span>
+                    <canvas id="hold-1" width="96" height="96" aria-label="Held piece"></canvas>
+                  </div>
+                  <div class="preview-panel">
+                    <span class="preview-label">Next</span>
+                    <canvas id="next-1" width="96" height="216" aria-label="Next pieces"></canvas>
+                  </div>
+                  <div class="stat-row">
+                    <span>Lines</span>
+                    <b id="lines-1">0</b>
+                  </div>
+                  <div class="stat-row">
+                    <span>Heat</span>
+                    <b id="heat-1">0</b>
+                  </div>
+                  <div class="heat-pips" id="heat-pips-1" aria-hidden="true"></div>
+                </aside>
+
+                <div class="playfield-row">
+                  <div class="playfield" id="playfield-1">
+                    <canvas
+                      id="board-1"
+                      tabindex="0"
+                      aria-label="Player 2 data grid. Stack packets and clear rows."
+                    ></canvas>
+                    <div class="scanlines" aria-hidden="true"></div>
+                    <div class="board-flash" id="flash-1" aria-hidden="true"></div>
+                  </div>
                 </div>
-                <div class="hud-actions">
-                    <button id="match-pause" class="chip-btn pause-btn" type="button" aria-label="Pause protocol">
-                        <span aria-hidden="true">&#10074;&#10074;</span>
-                        <span class="chip-label">Pause</span>
-                    </button>
-                    <button id="match-mute" class="chip-btn" type="button" aria-pressed="false">
-                        <span class="chip-dot" aria-hidden="true"></span>
-                        <span class="chip-label">Sound on</span>
-                    </button>
-                </div>
-            </header>
+              </div>
 
-            <main class="match-main">
-                <div class="boards-area" id="boards-area">
-                    <article class="player-stage p1" id="stage-0" data-player="0">
-                        <div class="player-banner">
-                            <span class="player-name" id="player-name-0">OPERATOR</span>
-                            <span class="player-score" id="score-0">0</span>
-                        </div>
+              <div class="touch-pad" id="pad-1" aria-label="Player 2 touch controls">
+                <button type="button" data-player="1" data-action="left" aria-label="Move left">&larr;</button>
+                <button type="button" data-player="1" data-action="soft" aria-label="Soft drop">&darr;</button>
+                <button type="button" data-player="1" data-action="right" aria-label="Move right">&rarr;</button>
+                <button type="button" data-player="1" data-action="hold" aria-label="Hold piece">HOLD</button>
+                <button type="button" data-player="1" data-action="ccw" aria-label="Rotate counter-clockwise">
+                  &#8634;
+                </button>
+                <button type="button" data-player="1" data-action="cw" aria-label="Rotate clockwise">&#8635;</button>
+                <button type="button" data-player="1" data-action="drop" aria-label="Hard drop">DROP</button>
+              </div>
+            </article>
+          </div>
+        </main>
 
-                        <div class="stage-body">
-                            <aside class="side-rail" aria-label="Player 1 piece previews">
-                                <div class="preview-panel">
-                                    <span class="preview-label">Hold</span>
-                                    <canvas id="hold-0" width="96" height="96" aria-label="Held piece"></canvas>
-                                </div>
-                                <div class="preview-panel">
-                                    <span class="preview-label">Next</span>
-                                    <canvas id="next-0" width="96" height="216" aria-label="Next pieces"></canvas>
-                                </div>
-                                <div class="stat-row">
-                                    <span>Lines</span>
-                                    <b id="lines-0">0</b>
-                                </div>
-                                <div class="stat-row">
-                                    <span>Heat</span>
-                                    <b id="heat-0">0</b>
-                                </div>
-                                <div class="heat-pips" id="heat-pips-0" aria-hidden="true"></div>
-                            </aside>
+        <p id="live" class="sr-only" aria-live="polite"></p>
 
-                            <div class="playfield-row">
-                                <div class="playfield" id="playfield-0">
-                                    <canvas id="board-0" tabindex="0"
-                                        aria-label="Player 1 data grid. Stack packets and clear rows."></canvas>
-                                    <div class="scanlines" aria-hidden="true"></div>
-                                    <div class="board-flash" id="flash-0" aria-hidden="true"></div>
-                                </div>
-                                <div class="firewall-panel" id="firewall-panel-0">
-                                    <span class="firewall-label">Firewall</span>
-                                    <canvas id="firewall-0" width="28" height="440" aria-hidden="true"></canvas>
-                                    <span class="firewall-pct" id="firewall-pct-0">0%</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="touch-pad" id="pad-0" aria-label="Player 1 touch controls">
-                            <button type="button" data-player="0" data-action="left" aria-label="Move left">&larr;</button>
-                            <button type="button" data-player="0" data-action="soft" aria-label="Soft drop">&darr;</button>
-                            <button type="button" data-player="0" data-action="right" aria-label="Move right">&rarr;</button>
-                            <button type="button" data-player="0" data-action="hold" aria-label="Hold piece">HOLD</button>
-                            <button type="button" data-player="0" data-action="ccw" aria-label="Rotate counter-clockwise">&#8634;</button>
-                            <button type="button" data-player="0" data-action="cw" aria-label="Rotate clockwise">&#8635;</button>
-                            <button type="button" data-player="0" data-action="drop" aria-label="Hard drop">DROP</button>
-                        </div>
-                    </article>
-
-                    <article class="player-stage p2 hidden" id="stage-1" data-player="1">
-                        <div class="player-banner">
-                            <span class="player-name" id="player-name-1">PLAYER 2</span>
-                            <span class="player-score" id="score-1">0</span>
-                        </div>
-
-                        <div class="stage-body">
-                            <aside class="side-rail" aria-label="Player 2 piece previews">
-                                <div class="preview-panel">
-                                    <span class="preview-label">Hold</span>
-                                    <canvas id="hold-1" width="96" height="96" aria-label="Held piece"></canvas>
-                                </div>
-                                <div class="preview-panel">
-                                    <span class="preview-label">Next</span>
-                                    <canvas id="next-1" width="96" height="216" aria-label="Next pieces"></canvas>
-                                </div>
-                                <div class="stat-row">
-                                    <span>Lines</span>
-                                    <b id="lines-1">0</b>
-                                </div>
-                                <div class="stat-row">
-                                    <span>Heat</span>
-                                    <b id="heat-1">0</b>
-                                </div>
-                                <div class="heat-pips" id="heat-pips-1" aria-hidden="true"></div>
-                            </aside>
-
-                            <div class="playfield-row">
-                                <div class="playfield" id="playfield-1">
-                                    <canvas id="board-1" tabindex="0"
-                                        aria-label="Player 2 data grid. Stack packets and clear rows."></canvas>
-                                    <div class="scanlines" aria-hidden="true"></div>
-                                    <div class="board-flash" id="flash-1" aria-hidden="true"></div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="touch-pad" id="pad-1" aria-label="Player 2 touch controls">
-                            <button type="button" data-player="1" data-action="left" aria-label="Move left">&larr;</button>
-                            <button type="button" data-player="1" data-action="soft" aria-label="Soft drop">&darr;</button>
-                            <button type="button" data-player="1" data-action="right" aria-label="Move right">&rarr;</button>
-                            <button type="button" data-player="1" data-action="hold" aria-label="Hold piece">HOLD</button>
-                            <button type="button" data-player="1" data-action="ccw" aria-label="Rotate counter-clockwise">&#8634;</button>
-                            <button type="button" data-player="1" data-action="cw" aria-label="Rotate clockwise">&#8635;</button>
-                            <button type="button" data-player="1" data-action="drop" aria-label="Hard drop">DROP</button>
-                        </div>
-                    </article>
-                </div>
-            </main>
-
-            <p id="live" class="sr-only" aria-live="polite"></p>
-
-            <div id="pause-overlay" class="overlay hidden" role="dialog" aria-modal="true"
-                aria-labelledby="pause-title">
-                <div class="overlay-card">
-                    <p class="overlay-kicker">Protocol paused</p>
-                    <h2 id="pause-title">System idle.</h2>
-                    <p class="overlay-sub">The firewall waits. So can you.</p>
-                    <div class="overlay-actions">
-                        <button id="pause-resume" class="primary" type="button">
-                            Resume <span class="key-hint">Esc</span>
-                        </button>
-                        <button id="pause-effects" class="ghost" type="button" aria-pressed="false">
-                            Reduce effects
-                        </button>
-                        <button id="pause-quit" class="ghost" type="button">Quit to Lobby</button>
-                    </div>
-                </div>
+        <div id="pause-overlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="pause-title">
+          <div class="overlay-card">
+            <p class="overlay-kicker">Protocol paused</p>
+            <h2 id="pause-title">System idle.</h2>
+            <p class="overlay-sub">The firewall waits. So can you.</p>
+            <div class="overlay-actions">
+              <button id="pause-resume" class="primary" type="button">Resume <span class="key-hint">Esc</span></button>
+              <button id="pause-effects" class="ghost" type="button" aria-pressed="false">Reduce effects</button>
+              <button id="pause-quit" class="ghost" type="button">Quit to Lobby</button>
             </div>
+          </div>
+        </div>
 
-            <div id="gameover-overlay" class="overlay hidden" role="dialog" aria-modal="true"
-                aria-labelledby="gameover-title">
-                <div class="overlay-card">
-                    <p class="overlay-kicker" id="gameover-kicker">Core dump</p>
-                    <h2 id="gameover-title">System overload.</h2>
-                    <div class="result-grid">
-                        <div class="result">
-                            <span class="result-value" id="go-score">0</span>
-                            <span class="result-label" id="go-score-label">Score</span>
-                        </div>
-                        <div class="result">
-                            <span class="result-value" id="go-lines">0</span>
-                            <span class="result-label">Lines</span>
-                        </div>
-                        <div class="result">
-                            <span class="result-value" id="go-heat">0</span>
-                            <span class="result-label">Max heat</span>
-                        </div>
-                    </div>
-                    <p class="overlay-sub" id="go-best">No record yet.</p>
-                    <p id="go-note" class="accent-note hidden">New personal best.</p>
-                    <div class="overlay-actions">
-                        <button id="go-retry" class="primary" type="button">
-                            Retry <span class="key-hint">Enter</span>
-                        </button>
-                        <button id="go-lobby" class="ghost" type="button">Lobby</button>
-                    </div>
-                </div>
+        <div
+          id="gameover-overlay"
+          class="overlay hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="gameover-title"
+        >
+          <div class="overlay-card">
+            <p class="overlay-kicker" id="gameover-kicker">Core dump</p>
+            <h2 id="gameover-title">System overload.</h2>
+            <div class="result-grid">
+              <div class="result">
+                <span class="result-value" id="go-score">0</span>
+                <span class="result-label" id="go-score-label">Score</span>
+              </div>
+              <div class="result">
+                <span class="result-value" id="go-lines">0</span>
+                <span class="result-label">Lines</span>
+              </div>
+              <div class="result">
+                <span class="result-value" id="go-heat">0</span>
+                <span class="result-label">Max heat</span>
+              </div>
             </div>
-
-            <div id="quit-overlay" class="overlay hidden" role="dialog" aria-modal="true"
-                aria-labelledby="quit-title">
-                <div class="overlay-card">
-                    <p class="overlay-kicker">Disconnect?</p>
-                    <h2 id="quit-title">Abort the protocol?</h2>
-                    <p class="overlay-sub">The current run will be lost.</p>
-                    <div class="overlay-actions">
-                        <button id="quit-cancel" class="primary" type="button">Keep playing</button>
-                        <button id="quit-confirm" class="ghost" type="button">Quit to lobby</button>
-                    </div>
-                </div>
+            <p class="overlay-sub" id="go-best">No record yet.</p>
+            <p id="go-note" class="accent-note hidden">New personal best.</p>
+            <div class="overlay-actions">
+              <button id="go-retry" class="primary" type="button">Retry <span class="key-hint">Enter</span></button>
+              <button id="go-lobby" class="ghost" type="button">Lobby</button>
             </div>
+          </div>
+        </div>
 
-        </section>
+        <div id="quit-overlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="quit-title">
+          <div class="overlay-card">
+            <p class="overlay-kicker">Disconnect?</p>
+            <h2 id="quit-title">Abort the protocol?</h2>
+            <p class="overlay-sub">The current run will be lost.</p>
+            <div class="overlay-actions">
+              <button id="quit-cancel" class="primary" type="button">Keep playing</button>
+              <button id="quit-confirm" class="ghost" type="button">Quit to lobby</button>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
 
-    <script src="tetris.js"></script>
-</body>
-
+    <script type="module" src="/tetris-protocol/tetris.ts"></script>
+  </body>
 </html>
-
-
-

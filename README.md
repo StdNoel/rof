@@ -14,8 +14,8 @@ release.
 
 1. **Menu** — Start the game, browse unlocked facts, view credits, open the
    minigames page, or reset progress.
-2. **A run** lasts **15 levels**. Level 1 starts when you click Start Game;
-   level 15 ends with a Game Complete card.
+2. **A run** lasts **9 levels**. Level 1 starts when you click Start Game;
+   level 9 ends with a Game Complete card.
 3. **Each level** presents a *question*: one or more media items (images
    and/or videos) plus a set of answer buttons that depend on the question's
    **mode** (see table below).
@@ -28,10 +28,10 @@ release.
    - **Green outline** → item is trustworthy / unmanipulated
    - **Red outline** → item is misleading, fabricated, or out of context
 6. **Interlude** — after each level, one or more cards appear:
-   - A **torn note** (only on levels 6–13, and only if a note is still
+   - A **torn note** (only on levels 6–9, and only if a note is still
      undiscovered in this session)
    - A **fact/hint** for that level
-   - On level 15, a **Game Complete** card in place of the fact
+   - On level 9, a **Game Complete** card in place of the fact
 7. **Hearts** — 3 hearts per session, shown top-left of the game screen.
    Losing all 3 triggers a jumpscare, then the interlude still shows, then
    the run resets and returns to the menu.
@@ -247,11 +247,11 @@ Modes are identified by **number** in the question JSON files.
 |  3   | Pick the misleading item, or All Real / All Fake | 2–4 | Mode 2 buttons + `All real`, `All fake`     | item `id`, `"all_real"`, `"all_fake"` |
 |  4   | Pick every misleading item (multi-select) | 2–4 | Per-item toggles + `Submit`                 | array of item `id`s |
 
-Adding a new mode is a three-line change: one branch in
-`choicesForMode()`, one in `isCorrect()`, one in `aiImageIds()`.
+Adding a new mode is a two-line change: one branch in
+`choicesForMode()`, one in `isCorrect()`.
 
 > The labels on the buttons (`"Real"` / `"Fake"` / `"A is AI"`) are
-> controlled in the `choicesForMode()` function in `main.js`. If you want
+> controlled in the `choicesForMode()` function in `main.ts`. If you want
 > the wording to read differently for the new topic — e.g. `"Trustworthy"`
 > / `"Misleading"`, or `"A is misleading"` instead of `"A is AI"` — that's
 > a one-line edit per button.
@@ -280,9 +280,9 @@ Every question lives in one of the `data/questions_<set>.json` files.
 ### Default timer rule
 
 - 1–2 items: 10 seconds
-- 3–4 items: 15 seconds
+- 3–4 items: 20 seconds
 - Video question: timer starts when the video ends, duration follows the
-  same 10/15 rule
+  same 10/20 rule
 - Per-question override: add `"timer": 20` to the JSON
 
 ### Media grid layout
@@ -328,7 +328,7 @@ screen afterward.
 
 **Torn notes** (`data/secrets.json`) — fragments of a longer, real story
 about the harms caused by online misinformation. These appear as
-torn-paper cards **before** the fact slide, on levels **6–13**, one per
+torn-paper cards **before** the fact slide, on levels **6–9**, one per
 level, drawn in a random order from whatever the player hasn't yet
 found.
 
@@ -346,7 +346,7 @@ Types:
 
 Add a new fact by appending to `data/facts.json`. Add a new note by
 appending to `data/secrets.json` (and extending the `NOTE_LEVELS` array
-in `main.js` if you need more levels to hold them).
+in `main.ts` if you need more levels to hold them).
 
 ---
 
@@ -355,7 +355,7 @@ in `main.js` if you need more levels to hold them).
 ```
 rof/
 ├── index.html
-├── main.js
+├── main.ts
 ├── style.css
 ├── README.md
 ├── minigames/                # minigame hub page
@@ -363,17 +363,17 @@ rof/
 ├── midnight-runner/          # Midnight Runner minigame
 │   ├── index.html
 │   ├── runner.css
-│   └── runner.js
+│   └── runner.ts
 ├── darts/                    # Last Call darts minigame
 │   ├── index.html
 │   ├── darts.css
-│   ├── darts.js
+│   ├── darts.ts
 │   ├── PLAN.md
 │   └── README.md
 ├── tetris-protocol/          # Tetris Protocol drop puzzle
 │   ├── index.html
 │   ├── tetris.css
-│   ├── tetris.js
+│   ├── tetris.ts
 │   ├── PLAN.md
 │   └── README.md
 └── data/
@@ -448,8 +448,8 @@ Append to `data/facts.json` with `type`, `unlockedAtLevel`, `title`,
 ### New torn note
 
 Append to `data/secrets.json` with `type: "incident"`, a `fragmentIndex`,
-a `title`, and a `body`. If you add more than 8 notes, extend
-`NOTE_LEVELS` in `main.js` to cover more levels.
+a `title`, and a `body`. If you add more than 4 notes, extend
+`NOTE_LEVELS` in `main.ts` to cover more levels.
 
 ### New mode (future)
 
@@ -457,14 +457,14 @@ a `title`, and a `body`. If you add more than 8 notes, extend
    `{ value, text }` buttons (or a custom renderer if the UI is
    fundamentally different, like Mode 4)
 2. Add a `case` to `isCorrect()`
-3. Add a `case` to `aiImageIds()` so the reveal outline knows what to
-   mark red
+3. Confirm `revealPlayerImageFeedback()` marks the right media so the
+   reveal outline knows what to highlight
 
 ---
 
 ## Loading Multiple Question Sets
 
-`main.js` fetches every file in:
+`main.ts` fetches every file in:
 
 ```js
 const QUESTION_SETS = [1, 2, 3, 4];

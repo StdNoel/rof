@@ -113,6 +113,13 @@ kbd {
     gap: 12px;
 }
 
+.topbar-actions {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
 .back-link {
     flex: 0 0 auto;
     display: inline-flex;
@@ -196,6 +203,38 @@ kbd {
     width: 43px;
     height: 43px;
     font-size: 22px;
+}
+
+.sound-btn .sound-icon {
+    width: 22px;
+    height: 22px;
+    display: block;
+}
+
+.gear.small .sound-icon {
+    width: 19px;
+    height: 19px;
+}
+
+.sound-btn .sound-wave,
+.sound-btn .sound-slash {
+    transition: opacity 0.15s ease;
+}
+
+.sound-btn .sound-slash {
+    opacity: 0;
+}
+
+.sound-btn[aria-pressed="false"] {
+    opacity: 0.65;
+}
+
+.sound-btn[aria-pressed="false"] .sound-wave {
+    opacity: 0;
+}
+
+.sound-btn[aria-pressed="false"] .sound-slash {
+    opacity: 1;
 }
 
 .lobby-main {
@@ -486,10 +525,16 @@ kbd {
     max-width: 720px;
     margin: 0 auto;
     display: grid;
-    grid-template-columns: 1fr auto auto auto auto;
+    grid-template-columns: 1fr auto auto auto;
     align-items: center;
     gap: clamp(10px, 3vw, 34px);
     padding: 2px 2px 0;
+}
+
+.hud-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .hud-group {
@@ -1035,7 +1080,29 @@ kbd {
     }
 
     .hud {
-        gap: 8px;
+        gap: 6px;
+    }
+
+    .hud-actions {
+        gap: 4px;
+    }
+
+    .hud-value {
+        font-size: clamp(14px, 3.4vw, 20px);
+    }
+
+    .hud-label {
+        font-size: 8px;
+        letter-spacing: 0.14em;
+    }
+
+    .hp-pips {
+        gap: 4px;
+    }
+
+    .pip {
+        width: 12px;
+        height: 12px;
     }
 
     .gear.small {

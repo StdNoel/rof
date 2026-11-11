@@ -1,8 +1,219 @@
-/* Tetris Protocol - standalone neon drop puzzle */
-(() => {
-    "use strict";
+export {};
 
-    // ============================================================
+import { createSfxEngine, type NoiseOptions, type ToneOptions } from "../sfx";
+
+type PieceType = "I" | "J" | "L" | "O" | "S" | "T" | "Z";
+type CellValue = PieceType | "garbage" | null;
+type BindAction = "left" | "right" | "soft" | "cw" | "ccw" | "hold" | "drop";
+type GameMode = "solo" | "duo";
+type PressureKey = "chill" | "standard" | "critical";
+
+interface TetrisSettings {
+    muted: boolean;
+    reducedEffects: boolean;
+    binds: Record<BindAction, string>;
+}
+
+interface PieceShape {
+    type: PieceType;
+    matrix: number[][];
+    x: number;
+    y: number;
+}
+
+interface Piece extends PieceShape {
+    rot: number;
+}
+
+interface Particle {
+    x: number;
+    y: number;
+    vx: number;
+    vy: number;
+    life: number;
+    maxLife: number;
+    size: number;
+    color: string;
+}
+
+interface Trail {
+    matrix: number[][];
+    x: number;
+    y: number;
+    type: PieceType;
+    life: number;
+}
+
+interface BoardState {
+    index: number;
+    grid: CellValue[][];
+    bag: PieceType[];
+    queue: PieceType[];
+    current: Piece | null;
+    hold: PieceType | null;
+    canHold: boolean;
+    score: number;
+    lines: number;
+    combo: number;
+    heat: number;
+    permanentHeat: number;
+    sinceClear: number;
+    dropAcc: number;
+    lockTimer: number;
+    lockResets: number;
+    softDrop: boolean;
+    moveDir: number;
+    lastDir: number;
+    dasTimer: number;
+    arrTimer: number;
+    incoming: number;
+    incomingTimer: number;
+    maxHeat: number;
+    firewall: number;
+    firewallTimer: number;
+    corruptionTimer: number;
+    trail: Trail[];
+    particles: Particle[];
+    flashRows: number[];
+    flashTimer: number;
+    over: boolean;
+    elapsed: number;
+    gridDirty: boolean;
+    gridCanvas: HTMLCanvasElement | null;
+    gridCtx: CanvasRenderingContext2D | null;
+    gridDpr: number;
+    holdDirty: boolean;
+    nextDirty: boolean;
+    firewallDirty: boolean;
+    hudScore: number;
+    hudLines: number;
+    hudHeat: number;
+    hudFirewall: number;
+    hudFirewallWarn: boolean;
+}
+
+interface GameState {
+    mode: GameMode;
+    pressure: keyof typeof PRESSURE;
+    boards: BoardState[];
+    over: boolean;
+    winner: number | null;
+    reason: string | null;
+}
+
+interface SoloBest {
+    bestScore: number;
+    bestLines: number;
+    maxHeat: number;
+}
+
+interface DuoBest {
+    p1Wins: number;
+    p2Wins: number;
+}
+
+interface BestRecords {
+    solo: SoloBest;
+    duo: DuoBest;
+}
+
+interface PressureConfig {
+    label: string;
+    firewall: number;
+    gravity: number;
+    scale: number;
+    corruptionFrom: number;
+}
+
+interface DomCache {
+    screenLobby: HTMLElement;
+    screenMatch: HTMLElement;
+    lobbyMute: HTMLElement;
+    matchMute: HTMLElement;
+    matchPause: HTMLElement;
+    effectsToggle: HTMLElement;
+    bindGrid: HTMLElement;
+    bindWarning: HTMLElement;
+    startBtn: HTMLElement;
+    recordsLine: HTMLElement;
+    resetRecords: HTMLElement;
+    quitBtn: HTMLElement;
+    hudMode: HTMLElement;
+    hudSub: HTMLElement;
+    boardsArea: HTMLElement;
+    live: HTMLElement;
+    pauseOverlay: HTMLElement;
+    pauseResume: HTMLElement;
+    pauseEffects: HTMLElement;
+    pauseQuit: HTMLElement;
+    gameoverOverlay: HTMLElement;
+    gameoverKicker: HTMLElement;
+    gameoverTitle: HTMLElement;
+    goScore: HTMLElement;
+    goScoreLabel: HTMLElement;
+    goLines: HTMLElement;
+    goHeat: HTMLElement;
+    goBest: HTMLElement;
+    goNote: HTMLElement;
+    goRetry: HTMLElement;
+    goLobby: HTMLElement;
+    quitOverlay: HTMLElement;
+    quitCancel: HTMLElement;
+    quitConfirm: HTMLElement;
+    modeCards: HTMLElement[];
+    pressureButtons: HTMLElement[];
+    stages: (HTMLElement | null)[];
+    boards: (HTMLCanvasElement | null)[];
+    playfields: (HTMLElement | null)[];
+    firewalls: (HTMLCanvasElement | null)[];
+    firewallPanels: (HTMLElement | null)[];
+    firewallPcts: (HTMLElement | null)[];
+    holds: (HTMLCanvasElement | null)[];
+    nexts: (HTMLCanvasElement | null)[];
+    lines: (HTMLElement | null)[];
+    heatLabels: (HTMLElement | null)[];
+    heatPips: (HTMLElement | null)[];
+    scores: (HTMLElement | null)[];
+    playerNames: (HTMLElement | null)[];
+    flashes: (HTMLElement | null)[];
+    pads: (HTMLElement | null)[];
+}
+
+interface AppState {
+    screen: "lobby" | "match";
+    mode: GameMode;
+    pressure: PressureKey;
+    settings: TetrisSettings;
+    best: BestRecords;
+    game: GameState | null;
+    paused: boolean;
+    lastFrame: number;
+    raf: number;
+    renderAcc: number;
+    capturingAction: BindAction | null;
+}
+
+interface DrawBlockOptions {
+    alpha?: number;
+    glow?: boolean;
+    ghost?: boolean;
+    garbage?: boolean;
+}
+
+interface DrawMatrixOptions {
+    color?: string;
+    glow?: boolean;
+    ghost?: boolean;
+}
+
+interface EndGameResult {
+    loser: number;
+    reason: string;
+}
+
+/* Tetris Protocol - standalone neon drop puzzle */
+
+// ============================================================
     // Config
     // ============================================================
     const COLS = 10;
@@ -14,7 +225,7 @@
     const BOARD_H = ROWS * CELL;
     const SETTINGS_KEY = "tp-settings-v1";
     const BEST_KEY = "tp-best-v1";
-    const DEFAULT_BINDS = {
+    const DEFAULT_BINDS: Record<BindAction, string> = {
         left: "KeyA",
         right: "KeyD",
         soft: "KeyS",
@@ -23,7 +234,7 @@
         hold: "KeyC",
         drop: "Space",
     };
-    const BIND_ACTIONS = [
+    const BIND_ACTIONS: { key: BindAction; label: string }[] = [
         { key: "left", label: "Move left" },
         { key: "right", label: "Move right" },
         { key: "soft", label: "Soft drop" },
@@ -47,13 +258,13 @@
     const HEAT_NAMES = ["Stable", "Warm", "Hot", "Critical", "Overload"];
     const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
 
-    const PRESSURE = {
+    const PRESSURE: Record<PressureKey, PressureConfig> = {
         chill: { label: "Chill", firewall: 14000, gravity: 900, scale: 0.82, corruptionFrom: 99 },
         standard: { label: "Standard", firewall: 10000, gravity: 800, scale: 0.78, corruptionFrom: 3 },
         critical: { label: "Critical", firewall: 7000, gravity: 700, scale: 0.72, corruptionFrom: 2 },
     };
 
-    const COLORS = {
+    const COLORS: Record<PieceType | "garbage", string> = {
         I: "#2ee6ff",
         J: "#5b8cff",
         L: "#ffb347",
@@ -64,7 +275,7 @@
         garbage: "#6b3a7e",
     };
 
-    const SHAPES = {
+    const SHAPES: Record<PieceType, number[][]> = {
         I: [
             [0, 0, 0, 0],
             [1, 1, 1, 1],
@@ -102,64 +313,68 @@
         ],
     };
 
-    const PIECE_TYPES = Object.keys(SHAPES);
+    const PIECE_TYPES = Object.keys(SHAPES) as PieceType[];
 
     // ============================================================
     // Helpers
     // ============================================================
-    function clamp(value, min, max) {
+    function clamp(value: number, min: number, max: number): number {
         return Math.max(min, Math.min(max, value));
     }
 
-    function randInt(min, max) {
+    function randInt(min: number, max: number): number {
         return min + Math.floor(Math.random() * (max - min + 1));
     }
 
-    function pick(list) {
-        return list[Math.floor(Math.random() * list.length)];
+    function pick<T>(list: T[]): T {
+        return list[Math.floor(Math.random() * list.length)]!;
     }
 
-    function rotateCW(matrix) {
+    function rotateCW(matrix: number[][]): number[][] {
         const size = matrix.length;
-        const next = [];
+        const next: number[][] = [];
         for (let y = 0; y < size; y += 1) {
             next.push([]);
             for (let x = 0; x < size; x += 1) {
-                next[y].push(matrix[size - 1 - x][y]);
+                next[y]!.push(matrix[size - 1 - x]![y]!);
             }
         }
         return next;
     }
 
-    function emptyGrid() {
-        const grid = [];
+    function emptyGrid(): CellValue[][] {
+        const grid: CellValue[][] = [];
         for (let y = 0; y < TOTAL_ROWS; y += 1) {
-            grid.push(new Array(COLS).fill(null));
+            grid.push(new Array<CellValue>(COLS).fill(null));
         }
         return grid;
     }
 
-    function prefersReduced() {
+    function prefersReduced(): boolean {
         return state.settings.reducedEffects || reducedMotionQuery.matches;
     }
 
-    function formatNumber(value) {
+    function formatNumber(value: number): string {
         return Math.floor(value).toLocaleString("en-US");
+    }
+
+    function isRecord(value: unknown): value is Record<string, unknown> {
+        return typeof value === "object" && value !== null;
     }
 
     // ============================================================
     // Persistence
     // ============================================================
-    function loadSettings() {
-        const binds = Object.assign({}, DEFAULT_BINDS);
-        const defaults = { muted: false, reducedEffects: false, binds };
+    function loadSettings(): TetrisSettings {
+        const binds: Record<BindAction, string> = Object.assign({}, DEFAULT_BINDS);
+        const defaults: TetrisSettings = { muted: false, reducedEffects: false, binds };
         try {
             const raw = localStorage.getItem(SETTINGS_KEY);
             if (!raw) return defaults;
-            const data = JSON.parse(raw);
-            const savedBinds = data && typeof data.binds === "object" && data.binds ? data.binds : null;
+            const data: unknown = JSON.parse(raw);
+            const savedBinds = isRecord(data) && isRecord(data.binds) ? data.binds : null;
             if (savedBinds) {
-                for (const action of Object.keys(DEFAULT_BINDS)) {
+                for (const action of Object.keys(DEFAULT_BINDS) as BindAction[]) {
                     const code = savedBinds[action];
                     if (typeof code === "string" && code && !RESERVED_CODES.has(code)) {
                         binds[action] = code;
@@ -167,8 +382,8 @@
                 }
             }
             return {
-                muted: Boolean(data && data.muted),
-                reducedEffects: Boolean(data && data.reducedEffects),
+                muted: isRecord(data) ? Boolean(data.muted) : false,
+                reducedEffects: isRecord(data) ? Boolean(data.reducedEffects) : false,
                 binds,
             };
         } catch (err) {
@@ -182,23 +397,25 @@
         } catch (err) { /* storage unavailable */ }
     }
 
-    function loadBest() {
-        const best = {
+    function loadBest(): BestRecords {
+        const best: BestRecords = {
             solo: { bestScore: 0, bestLines: 0, maxHeat: 0 },
             duo: { p1Wins: 0, p2Wins: 0 },
         };
         try {
             const raw = localStorage.getItem(BEST_KEY);
             if (!raw) return best;
-            const data = JSON.parse(raw);
-            if (data && data.solo) {
-                best.solo.bestScore = Number.isFinite(data.solo.bestScore) ? Math.max(0, Math.floor(data.solo.bestScore)) : 0;
-                best.solo.bestLines = Number.isFinite(data.solo.bestLines) ? Math.max(0, Math.floor(data.solo.bestLines)) : 0;
-                best.solo.maxHeat = Number.isFinite(data.solo.maxHeat) ? clamp(Math.floor(data.solo.maxHeat), 0, 4) : 0;
+            const data: unknown = JSON.parse(raw);
+            const solo = isRecord(data) && isRecord(data.solo) ? data.solo : null;
+            if (solo) {
+                best.solo.bestScore = typeof solo.bestScore === "number" && Number.isFinite(solo.bestScore) ? Math.max(0, Math.floor(solo.bestScore)) : 0;
+                best.solo.bestLines = typeof solo.bestLines === "number" && Number.isFinite(solo.bestLines) ? Math.max(0, Math.floor(solo.bestLines)) : 0;
+                best.solo.maxHeat = typeof solo.maxHeat === "number" && Number.isFinite(solo.maxHeat) ? clamp(Math.floor(solo.maxHeat), 0, 4) : 0;
             }
-            if (data && data.duo) {
-                best.duo.p1Wins = Number.isFinite(data.duo.p1Wins) ? Math.max(0, Math.floor(data.duo.p1Wins)) : 0;
-                best.duo.p2Wins = Number.isFinite(data.duo.p2Wins) ? Math.max(0, Math.floor(data.duo.p2Wins)) : 0;
+            const duo = isRecord(data) && isRecord(data.duo) ? data.duo : null;
+            if (duo) {
+                best.duo.p1Wins = typeof duo.p1Wins === "number" && Number.isFinite(duo.p1Wins) ? Math.max(0, Math.floor(duo.p1Wins)) : 0;
+                best.duo.p2Wins = typeof duo.p2Wins === "number" && Number.isFinite(duo.p2Wins) ? Math.max(0, Math.floor(duo.p2Wins)) : 0;
             }
         } catch (err) { /* storage unavailable */ }
         return best;
@@ -211,119 +428,70 @@
     }
 
     // ============================================================
-    // Audio (WebAudio, no files)
+    // Audio (shared WebAudio engine)
     // ============================================================
-    const audio = { ctx: null, muted: false };
+    const sfxEngine = createSfxEngine(false);
 
-    function ensureAudio() {
-        if (audio.muted) return null;
-        if (!audio.ctx) {
-            const Ctx = window.AudioContext || window.webkitAudioContext;
-            if (!Ctx) return null;
-            audio.ctx = new Ctx();
-        }
-        if (audio.ctx.state === "suspended") {
-            audio.ctx.resume().catch(() => { });
-        }
-        return audio.ctx;
+    function ensureAudio(): void {
+        sfxEngine.resume();
     }
 
-    function resumeAudio() {
-        if (audio.ctx && audio.ctx.state === "suspended") {
-            audio.ctx.resume().catch(() => { });
-        }
+    function resumeAudio(): void {
+        sfxEngine.resume();
     }
 
-    function tone(freq, duration, type, gain, slideTo, delay) {
-        const ctx = audio.ctx;
-        if (!ctx || audio.muted) return;
-        const start = ctx.currentTime + (delay || 0);
-        const osc = ctx.createOscillator();
-        const amp = ctx.createGain();
-        osc.type = type || "sine";
-        osc.frequency.setValueAtTime(Math.max(20, freq), start);
-        if (slideTo) {
-            osc.frequency.exponentialRampToValueAtTime(Math.max(20, slideTo), start + duration);
-        }
-        amp.gain.setValueAtTime(0.0001, start);
-        amp.gain.exponentialRampToValueAtTime(Math.max(0.0002, gain || 0.06), start + 0.012);
-        amp.gain.exponentialRampToValueAtTime(0.0001, start + duration);
-        osc.connect(amp);
-        amp.connect(ctx.destination);
-        osc.start(start);
-        osc.stop(start + duration + 0.03);
+    function tone(freq: number, duration: number, type?: OscillatorType, gain?: number, slideTo?: number | null, delay?: number, extra?: ToneOptions): void {
+        sfxEngine.tone(freq, duration, { type, gain, slideTo, delay, ...extra });
     }
 
-    function noiseBurst(duration, gain, filterFreq, delay) {
-        const ctx = audio.ctx;
-        if (!ctx || audio.muted) return;
-        const start = ctx.currentTime + (delay || 0);
-        const frames = Math.max(1, Math.floor(ctx.sampleRate * duration));
-        const buffer = ctx.createBuffer(1, frames, ctx.sampleRate);
-        const data = buffer.getChannelData(0);
-        for (let i = 0; i < frames; i += 1) {
-            data[i] = Math.random() * 2 - 1;
-        }
-        const source = ctx.createBufferSource();
-        source.buffer = buffer;
-        const filter = ctx.createBiquadFilter();
-        filter.type = "bandpass";
-        filter.frequency.value = filterFreq || 900;
-        filter.Q.value = 0.8;
-        const amp = ctx.createGain();
-        amp.gain.setValueAtTime(gain || 0.04, start);
-        amp.gain.exponentialRampToValueAtTime(0.0001, start + duration);
-        source.connect(filter);
-        filter.connect(amp);
-        amp.connect(ctx.destination);
-        source.start(start);
+    function noiseBurst(duration: number, gain?: number, filterFreq?: number, delay?: number, extra?: NoiseOptions): void {
+        sfxEngine.noise(duration, { gain, filterFreq, delay, ...extra });
     }
 
-    function sfx(name) {
-        if (!audio.ctx || audio.muted) return;
+    function sfx(name: string): void {
         switch (name) {
             case "move":
-                tone(240, 0.03, "square", 0.018);
+                tone(240, 0.05, "square", 0.02, null, 0, { sub: false, reverb: 0.05 });
                 break;
             case "rotate":
-                tone(420, 0.05, "triangle", 0.035, 520);
+                tone(420, 0.08, "triangle", 0.04, 520, 0, { reverb: 0.08 });
                 break;
             case "lock":
-                tone(150, 0.09, "triangle", 0.07, 80);
-                noiseBurst(0.04, 0.025, 600);
+                tone(150, 0.16, "triangle", 0.09, 80, 0, { sub: true, drive: 0.15 });
+                noiseBurst(0.06, 0.03, 600, 0, { reverb: 0.16 });
                 break;
             case "drop":
-                tone(110, 0.14, "sawtooth", 0.055, 50);
-                noiseBurst(0.08, 0.03, 400);
+                tone(110, 0.22, "sawtooth", 0.075, 50, 0, { sub: true, drive: 0.2 });
+                noiseBurst(0.1, 0.035, 400, 0, { reverb: 0.18 });
                 break;
             case "clear":
-                tone(520, 0.1, "sine", 0.055);
-                tone(780, 0.16, "sine", 0.05, null, 0.08);
+                tone(520, 0.14, "sine", 0.065, null, 0, { detune: 7, reverb: 0.22 });
+                tone(780, 0.24, "sine", 0.06, null, 0.08, { detune: 7, reverb: 0.24 });
                 break;
             case "tetris":
-                tone(440, 0.12, "sine", 0.06);
-                tone(660, 0.12, "sine", 0.06, null, 0.1);
-                tone(880, 0.24, "sine", 0.07, null, 0.2);
+                tone(440, 0.18, "sine", 0.07, null, 0, { detune: 8, reverb: 0.26 });
+                tone(660, 0.18, "sine", 0.07, null, 0.1, { detune: 8, reverb: 0.28 });
+                tone(880, 0.34, "sine", 0.08, null, 0.2, { detune: 8, reverb: 0.3 });
                 break;
             case "garbage":
-                noiseBurst(0.2, 0.05, 260);
-                tone(90, 0.3, "sawtooth", 0.05, 55);
+                noiseBurst(0.26, 0.06, 260, 0, { reverb: 0.24 });
+                tone(90, 0.38, "sawtooth", 0.07, 55, 0, { sub: true, drive: 0.2 });
                 break;
             case "heat":
-                tone(180, 0.35, "sawtooth", 0.045, 420);
+                tone(180, 0.42, "sawtooth", 0.06, 420, 0, { detune: 6, drive: 0.2, reverb: 0.2 });
                 break;
             case "over":
-                tone(180, 1.1, "sawtooth", 0.08, 44);
-                noiseBurst(0.7, 0.03, 220);
+                tone(180, 1.25, "sawtooth", 0.09, 44, 0, { sub: true, drive: 0.2, reverb: 0.3 });
+                noiseBurst(0.8, 0.04, 220, 0, { reverb: 0.28 });
                 break;
             case "win":
-                tone(523, 0.12, "sine", 0.06);
-                tone(659, 0.12, "sine", 0.06, null, 0.11);
-                tone(784, 0.24, "sine", 0.07, null, 0.22);
+                tone(523, 0.16, "sine", 0.07, null, 0, { detune: 8, reverb: 0.26 });
+                tone(659, 0.16, "sine", 0.07, null, 0.11, { detune: 8, reverb: 0.28 });
+                tone(784, 0.3, "sine", 0.08, null, 0.22, { detune: 8, reverb: 0.3 });
                 break;
             case "click":
             default:
-                tone(340, 0.05, "square", 0.022);
+                tone(340, 0.06, "square", 0.028, null, 0, { reverb: 0.08 });
                 break;
         }
     }
@@ -331,7 +499,7 @@
     // ============================================================
     // State & DOM
     // ============================================================
-    const state = {
+    const state: AppState = {
         screen: "lobby",
         mode: "solo",
         pressure: "standard",
@@ -344,16 +512,22 @@
         renderAcc: 0,
         capturingAction: null,
     };
-    audio.muted = state.settings.muted;
+    sfxEngine.setMuted(state.settings.muted);
 
-    const dom = {};
-    const boardCtx = [null, null];
-    const fwCtx = [null, null];
-    const holdCtx = [null, null];
-    const nextCtx = [null, null];
+    const dom = {} as DomCache;
+    const boardCtx: (CanvasRenderingContext2D | null)[] = [null, null];
+    const fwCtx: (CanvasRenderingContext2D | null)[] = [null, null];
+    const holdCtx: (CanvasRenderingContext2D | null)[] = [null, null];
+    const nextCtx: (CanvasRenderingContext2D | null)[] = [null, null];
 
-    function el(id) {
-        return document.getElementById(id);
+    function byId<T extends HTMLElement = HTMLElement>(id: string): T {
+        const element = document.getElementById(id);
+        if (!element) throw new Error(`Missing element #${id}`);
+        return element as T;
+    }
+
+    function el<T extends HTMLElement = HTMLElement>(id: string): T {
+        return byId<T>(id);
     }
 
     function cacheDom() {
@@ -392,16 +566,16 @@
         dom.quitCancel = el("quit-cancel");
         dom.quitConfirm = el("quit-confirm");
 
-        dom.modeCards = Array.from(document.querySelectorAll("[data-mode]"));
-        dom.pressureButtons = Array.from(document.querySelectorAll("[data-pressure]"));
+        dom.modeCards = Array.from(document.querySelectorAll<HTMLElement>("[data-mode]"));
+        dom.pressureButtons = Array.from(document.querySelectorAll<HTMLElement>("[data-pressure]"));
         dom.stages = [el("stage-0"), el("stage-1")];
-        dom.boards = [el("board-0"), el("board-1")];
+        dom.boards = [el<HTMLCanvasElement>("board-0"), el<HTMLCanvasElement>("board-1")];
         dom.playfields = [el("playfield-0"), el("playfield-1")];
-        dom.firewalls = [el("firewall-0"), el("firewall-1")];
+        dom.firewalls = [el<HTMLCanvasElement>("firewall-0"), null];
         dom.firewallPanels = [el("firewall-panel-0"), null];
         dom.firewallPcts = [el("firewall-pct-0"), null];
-        dom.holds = [el("hold-0"), el("hold-1")];
-        dom.nexts = [el("next-0"), el("next-1")];
+        dom.holds = [el<HTMLCanvasElement>("hold-0"), el<HTMLCanvasElement>("hold-1")];
+        dom.nexts = [el<HTMLCanvasElement>("next-0"), el<HTMLCanvasElement>("next-1")];
         dom.lines = [el("lines-0"), el("lines-1")];
         dom.heatLabels = [el("heat-0"), el("heat-1")];
         dom.heatPips = [el("heat-pips-0"), el("heat-pips-1")];
@@ -411,43 +585,46 @@
         dom.pads = [el("pad-0"), el("pad-1")];
 
         for (let i = 0; i < 2; i += 1) {
-            boardCtx[i] = dom.boards[i].getContext("2d");
-            sizeCanvas(dom.boards[i], boardCtx[i], BOARD_W, BOARD_H);
+            const board = dom.boards[i]!;
+            boardCtx[i] = board.getContext("2d");
+            sizeCanvas(board, boardCtx[i] ?? null, BOARD_W, BOARD_H);
             const fw = dom.firewalls[i];
             if (fw) {
                 fwCtx[i] = fw.getContext("2d");
-                sizeCanvas(fw, fwCtx[i], FW_W, BOARD_H);
+                sizeCanvas(fw, fwCtx[i] ?? null, FW_W, BOARD_H);
             }
-            holdCtx[i] = dom.holds[i].getContext("2d");
-            sizeCanvas(dom.holds[i], holdCtx[i], PREVIEW_W, PREVIEW_HOLD_H);
-            nextCtx[i] = dom.nexts[i].getContext("2d");
-            sizeCanvas(dom.nexts[i], nextCtx[i], PREVIEW_W, PREVIEW_NEXT_H);
+            const hold = dom.holds[i]!;
+            holdCtx[i] = hold.getContext("2d");
+            sizeCanvas(hold, holdCtx[i] ?? null, PREVIEW_W, PREVIEW_HOLD_H);
+            const next = dom.nexts[i]!;
+            nextCtx[i] = next.getContext("2d");
+            sizeCanvas(next, nextCtx[i] ?? null, PREVIEW_W, PREVIEW_NEXT_H);
         }
     }
 
     // ============================================================
     // Screens, HUD & announcements
     // ============================================================
-    function showScreen(name) {
+    function showScreen(name: "lobby" | "match"): void {
         state.screen = name;
         dom.screenLobby.classList.toggle("active", name === "lobby");
         dom.screenMatch.classList.toggle("active", name === "match");
         updatePauseButton();
     }
 
-    function updatePauseButton() {
+    function updatePauseButton(): void {
         if (!dom.matchPause) return;
         const show = state.screen === "match" && state.game && !state.game.over && !state.paused;
         dom.matchPause.classList.toggle("hidden", !show);
     }
 
-    function hideOverlays() {
+    function hideOverlays(): void {
         dom.pauseOverlay.classList.add("hidden");
         dom.gameoverOverlay.classList.add("hidden");
         dom.quitOverlay.classList.add("hidden");
     }
 
-    function announce(message) {
+    function announce(message: string): void {
         if (!dom.live) return;
         dom.live.textContent = "";
         window.setTimeout(() => {
@@ -455,17 +632,17 @@
         }, 30);
     }
 
-    function updateMuteButtons() {
-        const muted = state.settings.muted;
+    function updateMuteButtons(): void {
+        const enabled = !state.settings.muted;
         for (const button of [dom.lobbyMute, dom.matchMute]) {
             if (!button) continue;
-            button.setAttribute("aria-pressed", String(muted));
-            const label = button.querySelector(".chip-label");
-            if (label) label.textContent = muted ? "Sound off" : "Sound on";
+            button.setAttribute("aria-pressed", String(enabled));
+            button.setAttribute("aria-label", enabled ? "Sound on" : "Sound off");
+            button.setAttribute("title", enabled ? "Sound on" : "Sound off");
         }
     }
 
-    function updateEffectsUI() {
+    function updateEffectsUI(): void {
         const reduced = state.settings.reducedEffects;
         if (dom.effectsToggle) dom.effectsToggle.setAttribute("aria-pressed", String(reduced));
         if (dom.pauseEffects) {
@@ -475,7 +652,7 @@
         document.body.classList.toggle("reduced", prefersReduced());
     }
 
-    function keyLabel(code) {
+    function keyLabel(code?: string | null): string {
         if (!code) return "\u2014";
         if (code.startsWith("Key")) return code.slice(3);
         if (code.startsWith("Digit")) return code.slice(5);
@@ -494,12 +671,12 @@
         return code;
     }
 
-    function setBindWarning(message) {
+    function setBindWarning(message: string): void {
         if (!dom.bindWarning) return;
         dom.bindWarning.textContent = message || "";
     }
 
-    function renderBinds() {
+    function renderBinds(): void {
         if (!dom.bindGrid) return;
         dom.bindGrid.textContent = "";
         const binds = state.settings.binds || DEFAULT_BINDS;
@@ -527,23 +704,23 @@
         }
     }
 
-    function beginCapture(action) {
+    function beginCapture(action: BindAction): void {
         ensureAudio();
         state.capturingAction = action;
         setBindWarning("");
         renderBinds();
-        const button = dom.bindGrid && dom.bindGrid.querySelector('[data-action="' + action + '"]');
+        const button = dom.bindGrid && dom.bindGrid.querySelector<HTMLElement>('[data-action="' + action + '"]');
         if (button) button.focus();
         announce("Press a key for " + action + ". Escape cancels.");
     }
 
-    function cancelCapture() {
+    function cancelCapture(): void {
         state.capturingAction = null;
         setBindWarning("");
         renderBinds();
     }
 
-    function renderRecords() {
+    function renderRecords(): void {
         if (!dom.recordsLine) return;
         const solo = state.best.solo;
         const duo = state.best.duo;
@@ -560,35 +737,35 @@
     // ============================================================
     // Board & piece lifecycle
     // ============================================================
-    function makeBag() {
+    function makeBag(): PieceType[] {
         const bag = PIECE_TYPES.slice();
         for (let i = bag.length - 1; i > 0; i -= 1) {
             const j = Math.floor(Math.random() * (i + 1));
-            const tmp = bag[i];
-            bag[i] = bag[j];
+            const tmp = bag[i]!;
+            bag[i] = bag[j]!;
             bag[j] = tmp;
         }
         return bag;
     }
 
-    function nextType(board) {
+    function nextType(board: BoardState): PieceType {
         if (!board.bag.length) board.bag = makeBag();
-        return board.bag.pop();
+        return board.bag.pop()!;
     }
 
-    function makePiece(type) {
+    function makePiece(type: PieceType): Piece {
         const matrix = SHAPES[type].map((row) => row.slice());
         return {
             type,
             matrix,
-            x: Math.floor((COLS - matrix[0].length) / 2),
+            x: Math.floor((COLS - matrix[0]!.length) / 2),
             y: HIDDEN - 1,
             rot: 0,
         };
     }
 
-    function createBoard(index) {
-        const board = {
+    function createBoard(index: number): BoardState {
+        const board: BoardState = {
             index,
             grid: emptyGrid(),
             bag: [],
@@ -626,27 +803,36 @@
             gridCanvas: null,
             gridCtx: null,
             gridDpr: 0,
+            holdDirty: true,
+            nextDirty: true,
+            firewallDirty: true,
+            hudScore: -1,
+            hudLines: -1,
+            hudHeat: -1,
+            hudFirewall: -1,
+            hudFirewallWarn: false,
         };
         for (let i = 0; i < 4; i += 1) board.queue.push(nextType(board));
         return board;
     }
 
-    function collides(board, matrix, px, py) {
+    function collides(board: BoardState, matrix: number[][], px: number, py: number): boolean {
         for (let y = 0; y < matrix.length; y += 1) {
-            for (let x = 0; x < matrix[y].length; x += 1) {
-                if (!matrix[y][x]) continue;
+            for (let x = 0; x < matrix[y]!.length; x += 1) {
+                if (!matrix[y]![x]) continue;
                 const gx = px + x;
                 const gy = py + y;
                 if (gx < 0 || gx >= COLS || gy >= TOTAL_ROWS) return true;
-                if (gy >= 0 && board.grid[gy][gx]) return true;
+                if (gy >= 0 && board.grid[gy]![gx]!) return true;
             }
         }
         return false;
     }
 
-    function spawnNext(board) {
-        const type = board.queue.shift();
+    function spawnNext(board: BoardState): void {
+        const type = board.queue.shift()!;
         board.queue.push(nextType(board));
+        board.nextDirty = true;
         board.current = makePiece(type);
         board.lockTimer = 0;
         board.lockResets = 0;
@@ -659,7 +845,7 @@
         }
     }
 
-    function spawnType(board, type) {
+    function spawnType(board: BoardState, type: PieceType): void {
         board.current = makePiece(type);
         board.lockTimer = 0;
         board.lockResets = 0;
@@ -672,14 +858,14 @@
         }
     }
 
-    function resetLock(board) {
+    function resetLock(board: BoardState): void {
         if (board.lockResets < MAX_LOCK_RESETS) {
             board.lockTimer = 0;
             board.lockResets += 1;
         }
     }
 
-    function movePiece(board, dx) {
+    function movePiece(board: BoardState, dx: number): boolean {
         if (!board.current || board.over) return false;
         const piece = board.current;
         if (collides(board, piece.matrix, piece.x + dx, piece.y)) return false;
@@ -688,13 +874,13 @@
         return true;
     }
 
-    function rotatePiece(board, direction) {
+    function rotatePiece(board: BoardState, direction: number): void {
         if (!board.current || board.over) return;
         const piece = board.current;
         let matrix = piece.matrix;
         const turns = direction > 0 ? 1 : 3;
         for (let i = 0; i < turns; i += 1) matrix = rotateCW(matrix);
-        const kicks = [
+        const kicks: [number, number][] = [
             [0, 0], [-1, 0], [1, 0], [-2, 0], [2, 0], [0, -1], [-1, -1], [1, -1],
         ];
         for (const [ox, oy] of kicks) {
@@ -710,7 +896,7 @@
         }
     }
 
-    function holdPiece(board) {
+    function holdPiece(board: BoardState): void {
         if (!board.current || !board.canHold || board.over) return;
         const type = board.current.type;
         if (board.hold === null) {
@@ -724,16 +910,17 @@
             spawnType(board, swap);
         }
         board.canHold = false;
+        board.holdDirty = true;
     }
 
-    function ghostY(board) {
+    function ghostY(board: BoardState): number {
         if (!board.current) return 0;
         let y = board.current.y;
         while (!collides(board, board.current.matrix, board.current.x, y + 1)) y += 1;
         return y;
     }
 
-    function stepDown(board) {
+    function stepDown(board: BoardState): boolean {
         if (!board.current || board.over) return false;
         if (collides(board, board.current.matrix, board.current.x, board.current.y + 1)) return false;
         board.current.y += 1;
@@ -751,26 +938,35 @@
     const PREVIEW_HOLD_H = 96;
     const PREVIEW_NEXT_H = 216;
 
-    function sizeCanvas(canvas, ctx, logicalW, logicalH) {
+    function sizeCanvas(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D | null, logicalW: number, logicalH: number): void {
         const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
         canvas.width = Math.round(logicalW * dpr);
         canvas.height = Math.round(logicalH * dpr);
         if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     }
 
-    function resizeCanvases() {
+    function resizeCanvases(): void {
         for (let i = 0; i < 2; i += 1) {
-            if (dom.boards[i]) sizeCanvas(dom.boards[i], boardCtx[i], BOARD_W, BOARD_H);
-            if (dom.firewalls[i]) sizeCanvas(dom.firewalls[i], fwCtx[i], FW_W, BOARD_H);
-            if (dom.holds[i]) sizeCanvas(dom.holds[i], holdCtx[i], PREVIEW_W, PREVIEW_HOLD_H);
-            if (dom.nexts[i]) sizeCanvas(dom.nexts[i], nextCtx[i], PREVIEW_W, PREVIEW_NEXT_H);
+            if (dom.boards[i]) sizeCanvas(dom.boards[i]!, boardCtx[i] ?? null, BOARD_W, BOARD_H);
+            if (dom.firewalls[i]) sizeCanvas(dom.firewalls[i]!, fwCtx[i] ?? null, FW_W, BOARD_H);
+            if (dom.holds[i]) sizeCanvas(dom.holds[i]!, holdCtx[i] ?? null, PREVIEW_W, PREVIEW_HOLD_H);
+            if (dom.nexts[i]) sizeCanvas(dom.nexts[i]!, nextCtx[i] ?? null, PREVIEW_W, PREVIEW_NEXT_H);
+        }
+        if (state.game) {
+            for (const board of state.game.boards) {
+                board.gridDirty = true;
+                board.holdDirty = true;
+                board.nextDirty = true;
+                board.firewallDirty = true;
+            }
+            render();
         }
     }
 
     // ============================================================
     // Effects
     // ============================================================
-    function addParticle(board, px, py, color) {
+    function addParticle(board: BoardState, px: number, py: number, color?: string): void {
         if (prefersReduced()) return;
         const angle = Math.random() * Math.PI * 2;
         const speed = 0.08 + Math.random() * 0.22;
@@ -787,10 +983,10 @@
         if (board.particles.length > 160) board.particles.shift();
     }
 
-    function updateParticles(board, dt) {
+    function updateParticles(board: BoardState, dt: number): void {
         const list = board.particles;
         for (let i = list.length - 1; i >= 0; i -= 1) {
-            const p = list[i];
+            const p = list[i]!;
             p.life -= dt;
             if (p.life <= 0) {
                 list.splice(i, 1);
@@ -802,7 +998,7 @@
         }
     }
 
-    function addTrail(board) {
+    function addTrail(board: BoardState): void {
         if (prefersReduced() || !board.current) return;
         const piece = board.current;
         board.trail.push({
@@ -815,26 +1011,26 @@
         if (board.trail.length > 6) board.trail.shift();
     }
 
-    function updateTrail(board, dt) {
+    function updateTrail(board: BoardState, dt: number): void {
         for (let i = board.trail.length - 1; i >= 0; i -= 1) {
-            board.trail[i].life -= dt;
-            if (board.trail[i].life <= 0) board.trail.splice(i, 1);
+            board.trail[i]!.life -= dt;
+            if (board.trail[i]!.life <= 0) board.trail.splice(i, 1);
         }
     }
 
     // ============================================================
     // Heat
     // ============================================================
-    function computeHeat(board) {
+    function computeHeat(board: BoardState): number {
         let permanent = 0;
         for (let i = 0; i < HEAT_LINES.length; i += 1) {
-            if (board.lines >= HEAT_LINES[i]) permanent = i + 1;
+            if (board.lines >= HEAT_LINES[i]!) permanent = i + 1;
         }
         board.permanentHeat = permanent;
 
         let top = TOTAL_ROWS;
         for (let y = 0; y < TOTAL_ROWS; y += 1) {
-            if (board.grid[y].some((cell) => cell)) {
+            if (board.grid[y]!.some((cell) => cell)) {
                 top = y;
                 break;
             }
@@ -850,41 +1046,42 @@
         return Math.max(permanent, stack, timeTier);
     }
 
-    function applyHeatUI(board) {
+    function applyHeatUI(board: BoardState): void {
         const stage = dom.stages[board.index];
         if (stage) stage.setAttribute("data-heat", String(Math.min(board.heat, 4)));
         if (dom.heatLabels[board.index]) {
-            dom.heatLabels[board.index].textContent = String(Math.min(board.heat, 5));
+            dom.heatLabels[board.index]!.textContent = String(Math.min(board.heat, 5));
         }
     }
 
     // ============================================================
     // Line clearing & scoring
     // ============================================================
-    function clearLines(board) {
-        const full = [];
+    function clearLines(board: BoardState): number {
+        const full: number[] = [];
         for (let y = 0; y < TOTAL_ROWS; y += 1) {
-            if (board.grid[y].every((cell) => cell)) full.push(y);
+            if (board.grid[y]!.every((cell) => cell)) full.push(y);
         }
         if (!full.length) return 0;
 
         for (const y of full) {
             for (let x = 0; x < COLS; x += 1) {
+                const cell = board.grid[y]![x];
                 addParticle(
                     board,
                     x * CELL + CELL / 2,
                     (y - HIDDEN) * CELL + CELL / 2,
-                    COLORS[board.grid[y][x]] || COLORS.garbage
+                    cell ? COLORS[cell] : COLORS.garbage
                 );
             }
         }
 
-        const remaining = [];
+        const remaining: CellValue[][] = [];
         for (let y = 0; y < TOTAL_ROWS; y += 1) {
-            if (!full.includes(y)) remaining.push(board.grid[y]);
+            if (!full.includes(y)) remaining.push(board.grid[y]!);
         }
         while (remaining.length < TOTAL_ROWS) {
-            remaining.unshift(new Array(COLS).fill(null));
+            remaining.unshift(new Array<CellValue>(COLS).fill(null));
         }
         board.grid = remaining;
         board.gridDirty = true;
@@ -893,16 +1090,16 @@
         return full.length;
     }
 
-    function showFlash(board) {
+    function showFlash(board: BoardState): void {
         const flash = dom.flashes[board.index];
         if (!flash) return;
         flash.classList.add("on");
         window.setTimeout(() => flash.classList.remove("on"), 90);
     }
 
-    function applyClear(board, cleared) {
+    function applyClear(board: BoardState, cleared: number): void {
         const heat = Math.min(board.heat, 4);
-        const base = [0, 100, 300, 500, 800][Math.min(cleared, 4)];
+        const base = [0, 100, 300, 500, 800][Math.min(cleared, 4)]!;
         board.score += base * (heat + 1);
         board.lines += cleared;
         board.combo += 1;
@@ -911,17 +1108,18 @@
         }
         board.sinceClear = 0;
 
-        if (state.game.mode === "solo") {
-            const push = [0, 1, 2, 3, 5][Math.min(cleared, 4)] + (board.combo > 1 ? 1 : 0);
+        if (state.game!.mode === "solo") {
+            const push = [0, 1, 2, 3, 5][Math.min(cleared, 4)]! + (board.combo > 1 ? 1 : 0);
             board.firewall = Math.max(0, board.firewall - push);
+            board.firewallDirty = true;
         } else {
-            let outgoing = [0, 0, 1, 2, 4][Math.min(cleared, 4)] + (board.combo > 1 ? 1 : 0);
+            let outgoing = [0, 0, 1, 2, 4][Math.min(cleared, 4)]! + (board.combo > 1 ? 1 : 0);
             if (outgoing > 0) {
                 const cancel = Math.min(board.incoming, outgoing);
                 board.incoming -= cancel;
                 outgoing -= cancel;
                 if (outgoing > 0) {
-                    const opponent = state.game.boards[1 - board.index];
+                    const opponent = state.game!.boards[1 - board.index]!;
                     opponent.incoming += outgoing;
                     opponent.incomingTimer = 0;
                     announce("Player " + (board.index + 1) + " sent " + outgoing + " corrupted rows.");
@@ -932,7 +1130,7 @@
         if (cleared >= 4) sfx("tetris");
         else sfx("clear");
 
-        const label = ["", "Single", "Double", "Triple", "Tetris"][Math.min(cleared, 4)];
+        const label = ["", "Single", "Double", "Triple", "Tetris"][Math.min(cleared, 4)]!;
         announce(label + " compiled. " + board.lines + " lines. Heat " + board.heat + ".");
         showFlash(board);
     }
@@ -940,10 +1138,10 @@
     // ============================================================
     // Garbage & corruption
     // ============================================================
-    function insertGarbage(board, count) {
+    function insertGarbage(board: BoardState, count: number): void {
         const rows = Math.max(0, Math.min(count, TOTAL_ROWS));
         for (let i = 0; i < rows; i += 1) {
-            if (board.grid[i].some((cell) => cell)) {
+            if (board.grid[i]!.some((cell) => cell)) {
                 board.over = true;
                 board.current = null;
                 endGame({ loser: board.index, reason: "breach" });
@@ -953,7 +1151,7 @@
         for (let i = 0; i < rows; i += 1) {
             const holes = randInt(2, 4);
             const holeStart = randInt(0, COLS - holes);
-            const row = new Array(COLS).fill("garbage");
+            const row = new Array<CellValue>(COLS).fill("garbage");
             for (let h = 0; h < holes; h += 1) row[holeStart + h] = null;
             board.grid.shift();
             board.grid.push(row);
@@ -968,9 +1166,9 @@
         }
     }
 
-    function maybeCorrupt(board, dt) {
-        const pressure = PRESSURE[state.game.pressure];
-        if (state.game.mode !== "solo") return;
+    function maybeCorrupt(board: BoardState, dt: number): void {
+        const pressure = PRESSURE[state.game!.pressure];
+        if (state.game!.mode !== "solo") return;
         if (board.heat < pressure.corruptionFrom) {
             board.corruptionTimer = 0;
             return;
@@ -987,15 +1185,16 @@
         }
     }
 
-    function updateFirewall(board, dt) {
-        if (state.game.mode !== "solo") return;
-        const pressure = PRESSURE[state.game.pressure];
+    function updateFirewall(board: BoardState, dt: number): void {
+        if (state.game!.mode !== "solo") return;
+        const pressure = PRESSURE[state.game!.pressure];
         const interval = pressure.firewall / (1 + board.heat * 0.08);
         board.firewallTimer += dt;
         while (board.firewallTimer >= interval) {
             board.firewallTimer -= interval;
             if (board.firewall < FIREWALL_MAX) {
                 board.firewall += 1;
+                board.firewallDirty = true;
                 if (board.firewall === 15) {
                     announce("Firewall warning. Fifteen of twenty cells consumed.");
                     sfx("heat");
@@ -1011,16 +1210,16 @@
     // ============================================================
     // Piece locking & movement
     // ============================================================
-    function lockPiece(board) {
+    function lockPiece(board: BoardState): void {
         if (!board.current || board.over) return;
         const piece = board.current;
         for (let y = 0; y < piece.matrix.length; y += 1) {
-            for (let x = 0; x < piece.matrix[y].length; x += 1) {
-                if (!piece.matrix[y][x]) continue;
+            for (let x = 0; x < piece.matrix[y]!.length; x += 1) {
+                if (!piece.matrix[y]![x]) continue;
                 const gx = piece.x + x;
                 const gy = piece.y + y;
                 if (gy >= 0 && gy < TOTAL_ROWS && gx >= 0 && gx < COLS) {
-                    board.grid[gy][gx] = piece.type;
+                    board.grid[gy]![gx] = piece.type;
                 }
             }
         }
@@ -1039,7 +1238,7 @@
         spawnNext(board);
     }
 
-    function hardDrop(board) {
+    function hardDrop(board: BoardState): void {
         if (!board.current || board.over) return;
         let distance = 0;
         while (stepDown(board)) distance += 1;
@@ -1048,7 +1247,7 @@
         lockPiece(board);
     }
 
-    function startMove(board, dir) {
+    function startMove(board: BoardState, dir: number): void {
         if (!board.current || board.over || state.paused) return;
         board.moveDir = dir;
         board.dasTimer = 0;
@@ -1056,11 +1255,11 @@
         if (movePiece(board, dir)) sfx("move");
     }
 
-    function stopMove(board, dir) {
+    function stopMove(board: BoardState, dir: number): void {
         if (board.moveDir === dir) board.moveDir = 0;
     }
 
-    function updateDAS(board, dt) {
+    function updateDAS(board: BoardState, dt: number): void {
         if (!board.moveDir) return;
         board.dasTimer += dt;
         if (board.dasTimer < DAS) return;
@@ -1077,8 +1276,8 @@
     // ============================================================
     // Simulation
     // ============================================================
-    function updateBoard(board, dt) {
-        if (board.over || state.game.over) return;
+    function updateBoard(board: BoardState, dt: number): void {
+        if (board.over || state.game!.over) return;
         board.elapsed += dt;
         board.sinceClear += dt;
 
@@ -1114,7 +1313,7 @@
                 announce("System heat " + heat + ". " + (HEAT_NAMES[heat] || "Overload") + ".");
             }
         }
-        if (state.game.mode === "solo") {
+        if (state.game!.mode === "solo") {
             updateFirewall(board, dt);
             if (board.over) return;
             maybeCorrupt(board, dt);
@@ -1123,7 +1322,7 @@
 
         if (!board.current) return;
 
-        const pressure = PRESSURE[state.game.pressure];
+        const pressure = PRESSURE[state.game!.pressure];
         const interval = board.softDrop
             ? SOFT_INTERVAL
             : pressure.gravity * Math.pow(pressure.scale, Math.min(board.heat, 4));
@@ -1154,7 +1353,7 @@
         updateDAS(board, dt);
     }
 
-    function update(dt) {
+    function update(dt: number): void {
         if (!state.game || state.game.over) return;
         for (const board of state.game.boards) {
             updateBoard(board, dt);
@@ -1163,7 +1362,7 @@
         updateHud();
     }
 
-    function isIdleFrame() {
+    function isIdleFrame(): boolean {
         if (!state.game) return false;
         for (const board of state.game.boards) {
             if (board.particles.length || board.trail.length || board.heat >= 2 || board.flashTimer > 0) {
@@ -1173,29 +1372,37 @@
         return true;
     }
 
-    function loop(now) {
+    let wasActive = false;
+
+    function loop(now: number): void {
         const dt = Math.min(64, Math.max(0, now - state.lastFrame));
         state.lastFrame = now;
-        if (state.game && !state.paused && !state.game.over) {
+        const active = !!state.game && !state.paused && !state.game.over;
+        if (active) {
             update(dt);
-        }
-        if (isIdleFrame()) {
-            state.renderAcc += dt;
-            if (state.renderAcc >= IDLE_RENDER_INTERVAL) {
+            if (isIdleFrame()) {
+                state.renderAcc += dt;
+                if (state.renderAcc >= IDLE_RENDER_INTERVAL) {
+                    state.renderAcc = 0;
+                    render();
+                }
+            } else {
                 state.renderAcc = 0;
                 render();
             }
-        } else {
+        } else if (wasActive) {
+            // Draw the final frame once, then stop drawing while paused/over.
             state.renderAcc = 0;
             render();
         }
+        wasActive = active;
         state.raf = window.requestAnimationFrame(loop);
     }
 
     // ============================================================
     // Rendering primitives
     // ============================================================
-    function drawBlock(ctx, px, py, size, color, options) {
+    function drawBlock(ctx: CanvasRenderingContext2D, px: number, py: number, size: number, color: string, options?: DrawBlockOptions): void {
         const opts = options || {};
         const alpha = opts.alpha === undefined ? 1 : opts.alpha;
         const pad = Math.max(1.5, size * 0.06);
@@ -1262,12 +1469,12 @@
         ctx.restore();
     }
 
-    function drawMatrix(ctx, piece, originY, cell, alpha, options) {
+    function drawMatrix(ctx: CanvasRenderingContext2D, piece: PieceShape, originY: number, cell: number, alpha: number, options?: DrawMatrixOptions): void {
         const opts = options || {};
         const color = opts.color || COLORS[piece.type];
         for (let y = 0; y < piece.matrix.length; y += 1) {
-            for (let x = 0; x < piece.matrix[y].length; x += 1) {
-                if (!piece.matrix[y][x]) continue;
+            for (let x = 0; x < piece.matrix[y]!.length; x += 1) {
+                if (!piece.matrix[y]![x]) continue;
                 const px = (piece.x + x) * cell;
                 const py = (piece.y + y - originY) * cell;
                 if (py < -cell) continue;
@@ -1280,7 +1487,7 @@
         }
     }
 
-    function ensureGridCache(board) {
+    function ensureGridCache(board: BoardState): void {
         const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
         if (!board.gridCanvas || board.gridDpr !== dpr) {
             const canvas = document.createElement("canvas");
@@ -1293,7 +1500,7 @@
         }
         if (!board.gridDirty) return;
 
-        const ctx = board.gridCtx;
+        const ctx = board.gridCtx!;
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         ctx.clearRect(0, 0, BOARD_W, BOARD_H);
         ctx.fillStyle = "#0b0c0f";
@@ -1314,7 +1521,7 @@
 
         for (let y = HIDDEN; y < TOTAL_ROWS; y += 1) {
             for (let x = 0; x < COLS; x += 1) {
-                const cell = board.grid[y][x];
+                const cell = board.grid[y]![x];
                 if (!cell) continue;
                 drawBlock(ctx, x * CELL, (y - HIDDEN) * CELL, CELL, COLORS[cell] || COLORS.garbage, {
                     garbage: cell === "garbage",
@@ -1324,7 +1531,7 @@
         board.gridDirty = false;
     }
 
-    function renderBoard(board) {
+    function renderBoard(board: BoardState): void {
         const ctx = boardCtx[board.index];
         if (!ctx) return;
         const reduced = prefersReduced();
@@ -1332,7 +1539,7 @@
 
         ensureGridCache(board);
         ctx.clearRect(0, 0, BOARD_W, BOARD_H);
-        ctx.drawImage(board.gridCanvas, 0, 0, BOARD_W, BOARD_H);
+        ctx.drawImage(board.gridCanvas!, 0, 0, BOARD_W, BOARD_H);
 
         const flicker = heat >= 2 && !reduced
             ? 0.7 + 0.3 * Math.abs(Math.sin(board.elapsed / 130))
@@ -1407,7 +1614,7 @@
         }
     }
 
-    function renderFirewall(board) {
+    function renderFirewall(board: BoardState): void {
         const ctx = fwCtx[0];
         if (!ctx || board.index !== 0) return;
         ctx.clearRect(0, 0, FW_W, BOARD_H);
@@ -1425,16 +1632,16 @@
         }
     }
 
-    function drawPreviewPiece(ctx, type, centerX, centerY, cell) {
+    function drawPreviewPiece(ctx: CanvasRenderingContext2D, type: PieceType | null, centerX: number, centerY: number, cell: number): void {
         if (!type) return;
         const matrix = SHAPES[type];
-        let minX = matrix[0].length;
+        let minX = matrix[0]!.length;
         let maxX = -1;
         let minY = matrix.length;
         let maxY = -1;
         for (let y = 0; y < matrix.length; y += 1) {
-            for (let x = 0; x < matrix[y].length; x += 1) {
-                if (!matrix[y][x]) continue;
+            for (let x = 0; x < matrix[y]!.length; x += 1) {
+                if (!matrix[y]![x]) continue;
                 minX = Math.min(minX, x);
                 maxX = Math.max(maxX, x);
                 minY = Math.min(minY, y);
@@ -1448,7 +1655,7 @@
         const startY = centerY - height / 2;
         for (let y = minY; y <= maxY; y += 1) {
             for (let x = minX; x <= maxX; x += 1) {
-                if (!matrix[y][x]) continue;
+                if (!matrix[y]![x]) continue;
                 drawBlock(
                     ctx,
                     startX + (x - minX) * cell,
@@ -1461,7 +1668,7 @@
         }
     }
 
-    function renderHold(board) {
+    function renderHold(board: BoardState): void {
         const ctx = holdCtx[board.index];
         if (!ctx) return;
         ctx.clearRect(0, 0, PREVIEW_W, PREVIEW_HOLD_H);
@@ -1470,32 +1677,41 @@
         }
     }
 
-    function renderNext(board) {
+    function renderNext(board: BoardState): void {
         const ctx = nextCtx[board.index];
         if (!ctx) return;
         ctx.clearRect(0, 0, PREVIEW_W, PREVIEW_NEXT_H);
         const slots = Math.min(3, board.queue.length);
         const slotH = PREVIEW_NEXT_H / 3;
         for (let i = 0; i < slots; i += 1) {
-            drawPreviewPiece(ctx, board.queue[i], PREVIEW_W / 2, slotH * i + slotH / 2, 16);
+            drawPreviewPiece(ctx, board.queue[i]!, PREVIEW_W / 2, slotH * i + slotH / 2, 16);
         }
     }
 
-    function render() {
+    function render(): void {
         if (!state.game) return;
         for (const board of state.game.boards) {
-            if (board.index === 1 && dom.stages[1].classList.contains("hidden")) continue;
+            if (board.index === 1 && dom.stages[1]!.classList.contains("hidden")) continue;
             renderBoard(board);
-            renderFirewall(board);
-            renderHold(board);
-            renderNext(board);
+            if (board.firewallDirty) {
+                renderFirewall(board);
+                board.firewallDirty = false;
+            }
+            if (board.holdDirty) {
+                renderHold(board);
+                board.holdDirty = false;
+            }
+            if (board.nextDirty) {
+                renderNext(board);
+                board.nextDirty = false;
+            }
         }
     }
 
     // ============================================================
     // HUD & records
     // ============================================================
-    function ensurePips() {
+    function ensurePips(): void {
         for (let i = 0; i < 2; i += 1) {
             const holder = dom.heatPips[i];
             if (!holder || holder.children.length) continue;
@@ -1505,39 +1721,55 @@
         }
     }
 
-    function updateHud() {
+    function updateHud(): void {
         if (!state.game) return;
         for (const board of state.game.boards) {
             const i = board.index;
-            if (dom.scores[i]) dom.scores[i].textContent = formatNumber(board.score);
-            if (dom.lines[i]) dom.lines[i].textContent = String(board.lines);
-            if (dom.heatLabels[i]) dom.heatLabels[i].textContent = String(Math.min(board.heat, 5));
-            if (dom.heatPips[i]) {
-                const pips = dom.heatPips[i].children;
-                for (let p = 0; p < pips.length; p += 1) {
-                    pips[p].classList.toggle("on", p < board.heat);
-                    pips[p].classList.toggle("hot", p < board.heat && board.heat >= 3);
-                }
+            if (board.score !== board.hudScore) {
+                if (dom.scores[i]) dom.scores[i]!.textContent = formatNumber(board.score);
+                board.hudScore = board.score;
             }
-            if (dom.stages[i]) {
-                dom.stages[i].setAttribute("data-heat", String(Math.min(board.heat, 4)));
+            if (board.lines !== board.hudLines) {
+                if (dom.lines[i]) dom.lines[i]!.textContent = String(board.lines);
+                board.hudLines = board.lines;
+            }
+            if (board.heat !== board.hudHeat) {
+                if (dom.heatLabels[i]) dom.heatLabels[i]!.textContent = String(Math.min(board.heat, 5));
+                if (dom.heatPips[i]) {
+                    const pips = dom.heatPips[i]!.children;
+                    for (let p = 0; p < pips.length; p += 1) {
+                        pips[p]!.classList.toggle("on", p < board.heat);
+                        pips[p]!.classList.toggle("hot", p < board.heat && board.heat >= 3);
+                    }
+                }
+                if (dom.stages[i]) {
+                    dom.stages[i]!.setAttribute("data-heat", String(Math.min(board.heat, 4)));
+                }
+                board.hudHeat = board.heat;
             }
             if (i === 0) {
-                if (dom.firewallPcts[0]) {
-                    dom.firewallPcts[0].textContent = Math.round((board.firewall / FIREWALL_MAX) * 100) + "%";
+                if (board.firewall !== board.hudFirewall) {
+                    if (dom.firewallPcts[0]) {
+                        dom.firewallPcts[0]!.textContent = Math.round((board.firewall / FIREWALL_MAX) * 100) + "%";
+                    }
+                    board.hudFirewall = board.firewall;
                 }
-                if (dom.firewallPanels[0]) {
-                    dom.firewallPanels[0].classList.toggle("warning", board.firewall >= 15);
+                const warn = board.firewall >= 15;
+                if (warn !== board.hudFirewallWarn) {
+                    if (dom.firewallPanels[0]) {
+                        dom.firewallPanels[0]!.classList.toggle("warning", warn);
+                    }
+                    board.hudFirewallWarn = warn;
                 }
             }
         }
     }
 
-    function updateRecords() {
-        const game = state.game;
+    function updateRecords(): boolean {
+        const game = state.game!;
         let newBest = false;
         if (game.mode === "solo") {
-            const board = game.boards[0];
+            const board = game.boards[0]!;
             if (board.score > state.best.solo.bestScore) {
                 state.best.solo.bestScore = board.score;
                 newBest = true;
@@ -1554,10 +1786,10 @@
         return newBest;
     }
 
-    function showResults(newBest) {
-        const game = state.game;
+    function showResults(newBest: boolean): void {
+        const game = state.game!;
         const duo = game.mode === "duo";
-        const board = duo ? game.boards[game.winner] : game.boards[0];
+        const board = duo ? game.boards[game.winner!] : game.boards[0];
         let kicker;
         let title;
 
@@ -1575,8 +1807,8 @@
             dom.goScoreLabel.textContent = "Score";
         } else {
             kicker = "Match complete";
-            title = "Player " + (game.winner + 1) + " wins.";
-            dom.goScoreLabel.textContent = "P" + (game.winner + 1) + " score";
+            title = "Player " + (game.winner! + 1) + " wins.";
+            dom.goScoreLabel.textContent = "P" + (game.winner! + 1) + " score";
         }
 
         dom.gameoverKicker.textContent = kicker;
@@ -1600,13 +1832,14 @@
         dom.goRetry.focus();
     }
 
-    function endGame(result) {
+    function endGame(result: EndGameResult): void {
         const game = state.game;
         if (!game || game.over) return;
         game.over = true;
         game.reason = result.reason;
         game.winner = game.mode === "duo" ? 1 - result.loser : null;
-        if (game.boards[result.loser]) game.boards[result.loser].over = true;
+        const loserBoard = game.boards[result.loser];
+        if (loserBoard) loserBoard.over = true;
 
         const newBest = updateRecords();
         showResults(newBest);
@@ -1614,7 +1847,7 @@
         else sfx("over");
 
         const message = game.mode === "duo"
-            ? "Match complete. Player " + (game.winner + 1) + " wins."
+            ? "Match complete. Player " + (game.winner! + 1) + " wins."
             : "Core dump. Run ended.";
         announce(message);
     }
@@ -1622,10 +1855,10 @@
     // ============================================================
     // Game lifecycle
     // ============================================================
-    function startGame() {
+    function startGame(): void {
         if (state.capturingAction) cancelCapture();
         ensureAudio();
-        const game = {
+        const game: GameState = {
             mode: state.mode,
             pressure: state.pressure,
             boards: [],
@@ -1646,16 +1879,16 @@
         hideOverlays();
         ensurePips();
         dom.boardsArea.classList.toggle("duo", count === 2);
-        dom.stages[0].classList.remove("hidden");
-        dom.stages[1].classList.toggle("hidden", count < 2);
-        dom.stages[0].setAttribute("data-heat", "0");
-        dom.stages[1].setAttribute("data-heat", "0");
-        dom.firewallPanels[0].classList.toggle("hidden", count === 2);
+        dom.stages[0]!.classList.remove("hidden");
+        dom.stages[1]!.classList.toggle("hidden", count < 2);
+        dom.stages[0]!.setAttribute("data-heat", "0");
+        dom.stages[1]!.setAttribute("data-heat", "0");
+        dom.firewallPanels[0]!.classList.toggle("hidden", count === 2);
 
         dom.hudMode.textContent = count === 2 ? "Local VS" : "Solo vs Firewall";
         dom.hudSub.textContent = PRESSURE[state.pressure].label + " pressure";
-        dom.playerNames[0].textContent = count === 2 ? "PLAYER 1" : "OPERATOR";
-        dom.playerNames[1].textContent = "PLAYER 2";
+        dom.playerNames[0]!.textContent = count === 2 ? "PLAYER 1" : "OPERATOR";
+        dom.playerNames[1]!.textContent = "PLAYER 2";
 
         updateHud();
         showScreen("match");
@@ -1669,7 +1902,7 @@
         state.raf = window.requestAnimationFrame(loop);
     }
 
-    function goLobby() {
+    function goLobby(): void {
         window.cancelAnimationFrame(state.raf);
         state.raf = 0;
         state.game = null;
@@ -1682,7 +1915,7 @@
         if (dom.startBtn) dom.startBtn.focus();
     }
 
-    function releaseInputs() {
+    function releaseInputs(): void {
         if (!state.game) return;
         for (const board of state.game.boards) {
             board.softDrop = false;
@@ -1692,7 +1925,7 @@
         }
     }
 
-    function openPause() {
+    function openPause(): void {
         if (!state.game || state.game.over || state.paused) return;
         state.paused = true;
         releaseInputs();
@@ -1706,7 +1939,7 @@
         announce("Protocol paused.");
     }
 
-    function closePause() {
+    function closePause(): void {
         if (!state.paused) return;
         state.paused = false;
         state.lastFrame = performance.now();
@@ -1715,7 +1948,7 @@
         announce("Resumed.");
     }
 
-    function onEscape() {
+    function onEscape(): void {
         if (!dom.quitOverlay.classList.contains("hidden")) {
             dom.quitOverlay.classList.add("hidden");
             if (state.paused) dom.pauseOverlay.classList.remove("hidden");
@@ -1728,7 +1961,7 @@
         if (state.game && !state.game.over) openPause();
     }
 
-    function requestQuit() {
+    function requestQuit(): void {
         if (!state.game) return;
         if (state.game.over) {
             goLobby();
@@ -1745,9 +1978,9 @@
     // ============================================================
     // Input
     // ============================================================
-    function mapKey(code, duo) {
+    function mapKey(code: string, duo: boolean): { player: number; action: BindAction } | null {
         const binds = state.settings.binds || DEFAULT_BINDS;
-        for (const action of Object.keys(DEFAULT_BINDS)) {
+        for (const action of Object.keys(DEFAULT_BINDS) as BindAction[]) {
             if (code === binds[action]) return { player: 0, action };
         }
         // Layout-stable accessibility fallbacks.
@@ -1770,7 +2003,7 @@
         return null;
     }
 
-    function performAction(player, action, down) {
+    function performAction(player: number, action: BindAction, down: boolean): void {
         if (!state.game || state.game.over || state.paused) return;
         const board = state.game.boards[player];
         if (!board || board.over) return;
@@ -1797,7 +2030,7 @@
         else if (action === "drop") hardDrop(board);
     }
 
-    function onKeyDown(event) {
+    function onKeyDown(event: KeyboardEvent): void {
         if (state.capturingAction) {
             event.preventDefault();
             event.stopPropagation();
@@ -1827,7 +2060,7 @@
             saveSettings();
             setBindWarning("");
             renderBinds();
-            const button = dom.bindGrid && dom.bindGrid.querySelector('[data-action="' + action + '"]');
+            const button = dom.bindGrid && dom.bindGrid.querySelector<HTMLElement>('[data-action="' + action + '"]');
             if (button) button.focus();
             announce(action + " bound to " + keyLabel(event.code) + ".");
             return;
@@ -1836,7 +2069,8 @@
         resumeAudio();
         if (state.screen === "lobby") {
             if (event.key === "Enter") {
-                const tag = event.target && event.target.tagName;
+                const target = event.target;
+                const tag = target instanceof Element ? target.tagName : null;
                 if (tag === "BUTTON" || tag === "A") return;
                 event.preventDefault();
                 startGame();
@@ -1859,7 +2093,7 @@
         performAction(mapping.player, mapping.action, true);
     }
 
-    function onKeyUp(event) {
+    function onKeyUp(event: KeyboardEvent): void {
         if (state.capturingAction) return;
         if (state.screen !== "match" || !state.game) return;
         const duo = state.game.mode === "duo";
@@ -1871,18 +2105,18 @@
     // ============================================================
     // Wiring
     // ============================================================
-    function toggleMute() {
+    function toggleMute(): void {
         state.settings.muted = !state.settings.muted;
-        audio.muted = state.settings.muted;
+        sfxEngine.setMuted(state.settings.muted);
         saveSettings();
         updateMuteButtons();
-        if (!audio.muted) {
+        if (!state.settings.muted) {
             ensureAudio();
             sfx("click");
         }
     }
 
-    function toggleEffects() {
+    function toggleEffects(): void {
         state.settings.reducedEffects = !state.settings.reducedEffects;
         saveSettings();
         updateEffectsUI();
@@ -1890,7 +2124,7 @@
         sfx("click");
     }
 
-    function selectMode(mode) {
+    function selectMode(mode: GameMode): void {
         state.mode = mode;
         ensureAudio();
         for (const card of dom.modeCards) {
@@ -1901,7 +2135,7 @@
         sfx("click");
     }
 
-    function selectPressure(pressure) {
+    function selectPressure(pressure: PressureKey): void {
         state.pressure = pressure;
         ensureAudio();
         for (const button of dom.pressureButtons) {
@@ -1912,7 +2146,7 @@
         sfx("click");
     }
 
-    function resetRecords() {
+    function resetRecords(): void {
         if (!window.confirm("Reset all Tetris Protocol records?")) return;
         state.best = {
             solo: { bestScore: 0, bestLines: 0, maxHeat: 0 },
@@ -1923,19 +2157,19 @@
         announce("Records reset.");
     }
 
-    function wireTouchPads() {
+    function wireTouchPads(): void {
         for (const pad of dom.pads) {
             if (!pad) continue;
-            const buttons = pad.querySelectorAll("button[data-action]");
+            const buttons = pad.querySelectorAll<HTMLButtonElement>("button[data-action]");
             for (const button of buttons) {
                 const player = Number(button.dataset.player);
-                const action = button.dataset.action;
-                const down = (event) => {
+                const action = button.dataset.action as BindAction;
+                const down = (event: PointerEvent) => {
                     event.preventDefault();
                     resumeAudio();
                     performAction(player, action, true);
                 };
-                const up = (event) => {
+                const up = (event: PointerEvent) => {
                     event.preventDefault();
                     performAction(player, action, false);
                 };
@@ -1949,12 +2183,12 @@
         }
     }
 
-    function wireEvents() {
+    function wireEvents(): void {
         for (const card of dom.modeCards) {
-            card.addEventListener("click", () => selectMode(card.dataset.mode));
+            card.addEventListener("click", () => selectMode(card.dataset.mode as GameMode));
         }
         for (const button of dom.pressureButtons) {
-            button.addEventListener("click", () => selectPressure(button.dataset.pressure));
+            button.addEventListener("click", () => selectPressure(button.dataset.pressure as PressureKey));
         }
 
         dom.lobbyMute.addEventListener("click", toggleMute);
@@ -1999,7 +2233,7 @@
         wireTouchPads();
     }
 
-    function init() {
+    function init(): void {
         cacheDom();
         updateMuteButtons();
         updateEffectsUI();
@@ -2011,4 +2245,12 @@
     }
 
     init();
-})();
+
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    window.cancelAnimationFrame(state.raf);
+  });
+  import.meta.hot.accept(() => {
+    location.reload();
+  });
+}

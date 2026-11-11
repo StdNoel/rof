@@ -47,11 +47,12 @@ Open the gear button from the lobby or during a run. Settings pause an active ru
 
 - Boost mode: Auto fires at a full gauge; Manual holds at 100% until the boost key or touch button is pressed. Pickups during a boost extend it (up to 1.5× the base duration).
 - Manual boost key: click the key field, then press a letter or number key. Movement keys, browser shortcuts, and modifier combos are rejected with a warning.
+- Sound: toggles all game sound effects. The lobby and game HUD also have quick mute buttons.
 - Reduced effects cuts particles, screen shake, and pulsing animations.
 
 ## Persistence
 
-- Settings: `localStorage["mr-settings-v1"]`
+- Settings: `localStorage["mr-settings-v1"]` (`{ boostMode, boostKey, lastCharacter, reducedEffects, muted }`)
 - Personal bests: `localStorage["mr-best-v1"]`
 
 The lobby's Reset Progress button clears all three personal bests after confirmation. Settings and the selected character are kept.

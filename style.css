@@ -129,7 +129,7 @@ body::after {
 /* ===== CRT artifact 1: Static noise ===== */
 .crt-noise {
     position: fixed;
-    inset: 0;
+    inset: -200px;
     pointer-events: none;
     z-index: 9997;
 
@@ -140,27 +140,28 @@ body::after {
     opacity: var(--static-opacity);
     animation: crt-static 0.4s steps(4) infinite;
     mix-blend-mode: screen;
+    will-change: transform;
 }
 
 @keyframes crt-static {
     0% {
-        background-position: 0 0;
+        transform: translate3d(0, 0, 0);
     }
 
     25% {
-        background-position: -20px 10px;
+        transform: translate3d(-20px, 10px, 0);
     }
 
     50% {
-        background-position: 15px -25px;
+        transform: translate3d(15px, -25px, 0);
     }
 
     75% {
-        background-position: -10px -15px;
+        transform: translate3d(-10px, -15px, 0);
     }
 
     100% {
-        background-position: 0 0;
+        transform: translate3d(0, 0, 0);
     }
 }
 
@@ -168,7 +169,10 @@ body::after {
 #app::after {
     content: "";
     position: fixed;
-    inset: 0;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 200vh;
     pointer-events: none;
     z-index: 9998;
 
@@ -178,20 +182,31 @@ body::after {
             rgba(180, 255, 210, var(--hum-alpha)) 50%,
             rgba(255, 255, 255, 0) 55%,
             rgba(255, 255, 255, 0) 100%);
-    background-size: 100% 200%;
     background-repeat: no-repeat;
 
     animation: crt-roll var(--hum-duration) linear infinite;
     mix-blend-mode: screen;
+    will-change: transform;
 }
 
 @keyframes crt-roll {
     0% {
-        background-position: 0% -100%;
+        transform: translate3d(0, 50%, 0);
     }
 
     100% {
-        background-position: 0% 100%;
+        transform: translate3d(0, -50%, 0);
+    }
+}
+
+@media (pointer: coarse) {
+    .crt-noise {
+        animation: none;
+    }
+
+    #app::after {
+        animation: none;
+        opacity: 0;
     }
 }
 
