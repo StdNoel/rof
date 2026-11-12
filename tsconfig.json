@@ -17,6 +17,7 @@
     "*.ts",
     "darts/*.ts",
     "midnight-runner/*.ts",
-    "tetris-protocol/*.ts"
+    "tetris-protocol/*.ts",
+    "lux/*.ts"
   ]
 }

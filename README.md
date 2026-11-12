@@ -376,6 +376,11 @@ rof/
 │   ├── tetris.ts
 │   ├── PLAN.md
 │   └── README.md
+├── lux/                      # Lux survivor glow arena
+│   ├── index.html
+│   ├── lux.css
+│   ├── lux.ts
+│   └── README.md
 └── data/
     ├── facts.json
     ├── secrets.json

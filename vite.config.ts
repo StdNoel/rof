@@ -33,6 +33,7 @@ export default defineConfig(({ command }) => ({
         darts: resolve(process.cwd(), "darts/index.html"),
         runner: resolve(process.cwd(), "midnight-runner/index.html"),
         tetris: resolve(process.cwd(), "tetris-protocol/index.html"),
+        lux: resolve(process.cwd(), "lux/index.html"),
         credits: resolve(process.cwd(), "credits.html"),
       },
     },
