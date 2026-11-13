@@ -4,14 +4,23 @@ import { createSfxEngine, type NoiseOptions, type ToneOptions } from "../sfx";
 
 /* Lux — a survivor-style glow arena. Light is health, vision, and weapon range. */
 
-type WeaponId = "orbit" | "bolt" | "pulse" | "chain" | "scatter";
-type BasicEnemyKind = "chaser" | "swarmer" | "tank" | "ranged";
+type WeaponId = "orbit" | "bolt" | "pulse" | "chain" | "scatter" | "sparks";
+type BasicEnemyKind =
+    | "chaser"
+    | "swarmer"
+    | "tank"
+    | "ranged"
+    | "spartan"
+    | "bomber";
+type BossKind = "warden" | "cinder" | "herald" | "colossus" | "reaper";
 type EnemyKind = BasicEnemyKind | "boss";
-type StatId = "ember" | "wick" | "boots" | "focus" | "lens" | "cinder";
+type StatId =
+    "ember" | "wick" | "boots" | "focus" | "lens" | "cinder" | "photon";
 
 interface LuxSettings {
     muted: boolean;
     reducedEffects: boolean;
+    dashKey: string;
 }
 
 interface PlayerState {
@@ -32,11 +41,17 @@ interface PlayerStats {
     damageMult: number;
     radiusBonus: number;
     dashCdMult: number;
+    sparkDamageMult: number;
 }
 
 interface Enemy {
     id: number;
     kind: EnemyKind;
+    bossKind?: BossKind;
+    life?: number;
+    dashTime?: number;
+    dashDirX?: number;
+    dashDirY?: number;
     x: number;
     y: number;
     hp: number;
@@ -63,6 +78,7 @@ interface Projectile {
     pierce: number;
     hitIds: number[];
     color: string;
+    turnRate: number;
     dead: boolean;
 }
 
@@ -135,7 +151,8 @@ interface GameState {
     effects: Effect[];
     nextEnemyId: number;
     spawnTimer: number;
-    bossIndex: number;
+    nextBossAt: number;
+    bossTier: number;
     shake: number;
     flash: number;
     newBest: boolean;
@@ -174,6 +191,7 @@ interface StatUpgradeConfig {
     name: string;
     desc: string;
     max: number;
+    requires?: WeaponId;
 }
 
 interface UpgradeChoice {
@@ -203,6 +221,12 @@ interface HudCache {
     weaponSig: string;
 }
 
+interface DashCache {
+    ready: boolean;
+    offset: number;
+    active: boolean;
+}
+
 interface DomCache {
     screenLobby: HTMLElement;
     screenGame: HTMLElement;
@@ -214,6 +238,7 @@ interface DomCache {
     gamePause: HTMLElement;
     gameMute: HTMLElement;
     gameSettings: HTMLElement;
+    gameBack: HTMLElement;
     hudTime: HTMLElement;
     hudKills: HTMLElement;
     hudLevel: HTMLElement;
@@ -224,6 +249,9 @@ interface DomCache {
     canvasWrap: HTMLElement;
     game: HTMLCanvasElement;
     touchDash: HTMLElement;
+    dashStatus: HTMLElement;
+    dashRingFill: SVGCircleElement;
+    dashLive: HTMLElement;
     levelupOverlay: HTMLElement;
     levelupTitle: HTMLElement;
     levelupCards: HTMLElement;
@@ -242,6 +270,9 @@ interface DomCache {
     settingsModal: HTMLElement;
     soundToggle: HTMLElement;
     reducedToggle: HTMLElement;
+    dashKeyBtn: HTMLElement;
+    dashKeyError: HTMLElement;
+    dashKeyHint: HTMLElement;
     settingsClose: HTMLElement;
     live: HTMLElement;
 }
@@ -255,6 +286,7 @@ const ARENA_W = 1200;
 const ARENA_H = 900;
 const SETTINGS_KEY = "lux-settings-v1";
 const BEST_KEY = "lux-best-v1";
+const DASH_DEFAULT = "Space";
 
 const BASE_LIGHT = 100;
 const BASE_DRAIN = 2;
@@ -263,10 +295,15 @@ const PLAYER_RADIUS = 11;
 const IFRAME_TIME = 0.85;
 const DASH_TIME = 0.16;
 const DASH_COOLDOWN = 1.7;
+const DASH_RING_LENGTH = 289; // Keep in sync with .dash-ring-fill stroke-dasharray.
 const DASH_SPEED = 820;
 const DASH_IFRAME = 0.36;
 const MAX_PARTICLES = 200;
-const BOSS_TIMES = [60, 120, 180];
+const BOMBER_FUSE = 2.2;
+const BOMBER_BLAST = 96;
+const SPARTAN_DASH_INTERVAL = 3;
+const SPARTAN_DASH_TIME = 0.2;
+const SPARTAN_DASH_SPEED = 520;
 const TAU = Math.PI * 2;
 
 const WEAPONS: Record<WeaponId, WeaponConfig> = {
@@ -315,9 +352,25 @@ const WEAPONS: Record<WeaponId, WeaponConfig> = {
         desc: "Sprays a short fan of burning shards at the nearest foe.",
         evoDesc: "A dense seven-shard fan with extra punch.",
     },
+    sparks: {
+        id: "sparks",
+        name: "Sparks",
+        evolvedName: "Swarm",
+        glyph: "✨",
+        color: "#aaffd0",
+        desc: "Sparks that seek the nearest enemy inside your glow.",
+        evoDesc: "A larger swarm that pierces two targets.",
+    },
 };
 
-const WEAPON_IDS: WeaponId[] = ["orbit", "bolt", "pulse", "chain", "scatter"];
+const WEAPON_IDS: WeaponId[] = [
+    "orbit",
+    "bolt",
+    "pulse",
+    "chain",
+    "scatter",
+    "sparks",
+];
 
 const STAT_UPGRADES: Record<StatId, StatUpgradeConfig> = {
     ember: {
@@ -342,17 +395,31 @@ const STAT_UPGRADES: Record<StatId, StatUpgradeConfig> = {
     },
     lens: {
         name: "Wide Halo",
-        desc: "Glow radius +14 px. Vision and weapon range grow together.",
-        max: 5,
+        desc: "Glow radius +10 px. Vision and weapon range grow together.",
+        max: 3,
     },
     cinder: {
         name: "Quick Step",
         desc: "Dash cooldown -12%.",
         max: 5,
     },
+    photon: {
+        name: "Rich Photons",
+        desc: "Sparks deal +30% more damage.",
+        max: 4,
+        requires: "sparks",
+    },
 };
 
-const STAT_IDS: StatId[] = ["ember", "wick", "boots", "focus", "lens", "cinder"];
+const STAT_IDS: StatId[] = [
+    "ember",
+    "wick",
+    "boots",
+    "focus",
+    "lens",
+    "cinder",
+    "photon",
+];
 
 const ENEMY_CONFIG: Record<BasicEnemyKind, EnemyConfig> = {
     chaser: {
@@ -391,6 +458,94 @@ const ENEMY_CONFIG: Record<BasicEnemyKind, EnemyConfig> = {
         xp: 2,
         color: "#4fd1c5",
     },
+    spartan: {
+        hp: 40,
+        speed: 72,
+        radius: 16,
+        damage: 50,
+        light: 9,
+        xp: 3,
+        color: "#e8e0c8",
+    },
+    bomber: {
+        hp: 26,
+        speed: 48,
+        radius: 16,
+        damage: 42,
+        light: 8,
+        xp: 3,
+        color: "#ff9a3c",
+    },
+};
+
+interface BossConfig {
+    name: string;
+    hp: number;
+    hpScale: number;
+    speed: number;
+    radius: number;
+    damage: number;
+    light: number;
+    xp: number;
+    color: string;
+}
+
+const BOSS_CONFIG: Record<BossKind, BossConfig> = {
+    warden: {
+        name: "Warden",
+        hp: 230,
+        hpScale: 0.85,
+        speed: 30,
+        radius: 42,
+        damage: 28,
+        light: 25,
+        xp: 8,
+        color: "#ff7a90",
+    },
+    cinder: {
+        name: "Cinder",
+        hp: 165,
+        hpScale: 0.7,
+        speed: 44,
+        radius: 36,
+        damage: 22,
+        light: 28,
+        xp: 9,
+        color: "#ffb03a",
+    },
+    herald: {
+        name: "Herald",
+        hp: 130,
+        hpScale: 0.6,
+        speed: 86,
+        radius: 30,
+        damage: 26,
+        light: 22,
+        xp: 8,
+        color: "#7fe7ff",
+    },
+    colossus: {
+        name: "Colossus",
+        hp: 460,
+        hpScale: 1,
+        speed: 22,
+        radius: 54,
+        damage: 42,
+        light: 48,
+        xp: 15,
+        color: "#b07bff",
+    },
+    reaper: {
+        name: "Reaper",
+        hp: 84,
+        hpScale: 0.35,
+        speed: 74,
+        radius: 34,
+        damage: 9999,
+        light: 45,
+        xp: 14,
+        color: "#d8b4ff",
+    },
 };
 
 const MOVE_KEYS = new Set([
@@ -410,6 +565,72 @@ const SCROLL_KEYS = new Set([
     "ArrowRight",
     "Space",
 ]);
+const RESERVED_CODES = new Set([
+    "KeyW",
+    "KeyA",
+    "KeyS",
+    "KeyD",
+    "ArrowUp",
+    "ArrowDown",
+    "ArrowLeft",
+    "ArrowRight",
+    "Escape",
+    "Enter",
+    "NumpadEnter",
+    "Tab",
+]);
+const MODIFIER_ONLY_CODES = new Set([
+    "ShiftLeft",
+    "ShiftRight",
+    "ControlLeft",
+    "ControlRight",
+    "AltLeft",
+    "AltRight",
+    "MetaLeft",
+    "MetaRight",
+]);
+const KEY_LABELS: Record<string, string> = {
+    Space: "Space",
+    ShiftLeft: "Left Shift",
+    ShiftRight: "Right Shift",
+    ControlLeft: "Left Ctrl",
+    ControlRight: "Right Ctrl",
+    AltLeft: "Left Alt",
+    AltRight: "Right Alt",
+    MetaLeft: "Left Meta",
+    MetaRight: "Right Meta",
+    ArrowUp: "↑",
+    ArrowDown: "↓",
+    ArrowLeft: "←",
+    ArrowRight: "→",
+    Enter: "Enter",
+    NumpadEnter: "Numpad Enter",
+    Escape: "Esc",
+    Tab: "Tab",
+    Backspace: "Backspace",
+    CapsLock: "Caps Lock",
+    Comma: ",",
+    Period: ".",
+    Slash: "/",
+    Semicolon: ";",
+    Quote: "'",
+    BracketLeft: "[",
+    BracketRight: "]",
+    Backslash: "\\",
+    Minus: "-",
+    Equal: "=",
+    Backquote: "`",
+};
+
+function formatKey(code: string): string {
+    return (
+        KEY_LABELS[code] ?? code.replace(/^Key/, "").replace(/^Digit/, "")
+    );
+}
+
+function hasBindConflict(code: string): boolean {
+    return RESERVED_CODES.has(code) || MOVE_KEYS.has(code);
+}
 
 // ============================================================
 // Helpers
@@ -436,7 +657,11 @@ function formatClock(totalSeconds: number): string {
     const safe = Math.max(0, Math.floor(totalSeconds));
     const minutes = Math.floor(safe / 60);
     const seconds = safe % 60;
-    return String(minutes).padStart(2, "0") + ":" + String(seconds).padStart(2, "0");
+    return (
+        String(minutes).padStart(2, "0") +
+        ":" +
+        String(seconds).padStart(2, "0")
+    );
 }
 
 function distance(ax: number, ay: number, bx: number, by: number): number {
@@ -466,14 +691,23 @@ function lightRadiusOf(g: GameState): number {
 // Persistence
 // ============================================================
 function loadSettings(): LuxSettings {
-    const defaults: LuxSettings = { muted: false, reducedEffects: false };
+    const defaults: LuxSettings = {
+        muted: false,
+        reducedEffects: false,
+        dashKey: DASH_DEFAULT,
+    };
     try {
         const raw = localStorage.getItem(SETTINGS_KEY);
         if (!raw) return defaults;
         const data = JSON.parse(raw) as Record<string, unknown>;
+        const dashKey =
+            typeof data.dashKey === "string" && data.dashKey.trim() !== ""
+                ? data.dashKey
+                : DASH_DEFAULT;
         return {
             muted: Boolean(data.muted),
             reducedEffects: Boolean(data.reducedEffects),
+            dashKey,
         };
     } catch (err) {
         return defaults;
@@ -511,7 +745,10 @@ function loadBest(): number {
 
 function saveBest(): void {
     try {
-        localStorage.setItem(BEST_KEY, JSON.stringify({ bestSeconds: state.best }));
+        localStorage.setItem(
+            BEST_KEY,
+            JSON.stringify({ bestSeconds: state.best }),
+        );
     } catch (err) {
         /* storage unavailable */
     }
@@ -569,30 +806,80 @@ function sfx(name: string): void {
             break;
         case "hit":
             noiseBurst(0.18, 0.05, 260, 0, { reverb: 0.2 });
-            tone(120, 0.26, "sawtooth", 0.065, 55, 0, { sub: true, drive: 0.2, reverb: 0.2 });
+            tone(120, 0.26, "sawtooth", 0.065, 55, 0, {
+                sub: true,
+                drive: 0.2,
+                reverb: 0.2,
+            });
             break;
         case "levelup":
             tone(523, 0.12, "sine", 0.05, null, 0, { detune: 7, reverb: 0.22 });
-            tone(659, 0.12, "sine", 0.05, null, 0.08, { detune: 7, reverb: 0.24 });
-            tone(784, 0.18, "sine", 0.055, null, 0.16, { detune: 7, reverb: 0.26 });
-            tone(1046, 0.28, "sine", 0.06, null, 0.24, { detune: 7, reverb: 0.3 });
+            tone(659, 0.12, "sine", 0.05, null, 0.08, {
+                detune: 7,
+                reverb: 0.24,
+            });
+            tone(784, 0.18, "sine", 0.055, null, 0.16, {
+                detune: 7,
+                reverb: 0.26,
+            });
+            tone(1046, 0.28, "sine", 0.06, null, 0.24, {
+                detune: 7,
+                reverb: 0.3,
+            });
             break;
         case "dash":
             noiseBurst(0.18, 0.035, 1200, 0, { reverb: 0.12 });
             tone(330, 0.16, "triangle", 0.035, 170, 0, { reverb: 0.12 });
             break;
         case "boss":
-            tone(70, 0.95, "sawtooth", 0.08, 40, 0, { sub: true, drive: 0.2, reverb: 0.3 });
+            tone(70, 0.95, "sawtooth", 0.08, 40, 0, {
+                sub: true,
+                drive: 0.2,
+                reverb: 0.3,
+            });
             noiseBurst(0.65, 0.035, 150, 0, { reverb: 0.28 });
             break;
+        case "reaper":
+            tone(1180, 0.3, "sawtooth", 0.045, 480, 0, {
+                drive: 0.35,
+                reverb: 0.32,
+            });
+            tone(84, 1.1, "sawtooth", 0.07, 38, 0, {
+                sub: true,
+                drive: 0.25,
+                reverb: 0.34,
+            });
+            noiseBurst(0.75, 0.04, 900, 0, { reverb: 0.32 });
+            break;
+        case "bomb":
+            noiseBurst(0.32, 0.06, 180, 0, { reverb: 0.2 });
+            tone(95, 0.38, "sawtooth", 0.07, 42, 0, {
+                sub: true,
+                drive: 0.3,
+                reverb: 0.22,
+            });
+            break;
         case "over":
-            tone(210, 1.35, "sawtooth", 0.08, 40, 0, { sub: true, drive: 0.2, reverb: 0.3 });
+            tone(210, 1.35, "sawtooth", 0.08, 40, 0, {
+                sub: true,
+                drive: 0.2,
+                reverb: 0.3,
+            });
             noiseBurst(0.9, 0.04, 190, 0, { reverb: 0.28 });
             break;
         case "best":
-            tone(523, 0.16, "sine", 0.055, null, 0.8, { detune: 8, reverb: 0.26 });
-            tone(659, 0.16, "sine", 0.055, null, 0.92, { detune: 8, reverb: 0.28 });
-            tone(784, 0.3, "sine", 0.06, null, 1.04, { detune: 8, reverb: 0.3 });
+            tone(523, 0.16, "sine", 0.055, null, 0.8, {
+                detune: 8,
+                reverb: 0.26,
+            });
+            tone(659, 0.16, "sine", 0.055, null, 0.92, {
+                detune: 8,
+                reverb: 0.28,
+            });
+            tone(784, 0.3, "sine", 0.06, null, 1.04, {
+                detune: 8,
+                reverb: 0.3,
+            });
             break;
         case "click":
         default:
@@ -612,6 +899,8 @@ let rafId = 0;
 let lastFrame = 0;
 let pausedBySettings = false;
 let lastFocusedElement: HTMLElement | null = null;
+let listeningForKey = false;
+let previousDashKey: string | null = null;
 let currentChoices: UpgradeChoice[] = [];
 let hudCache: HudCache = {
     time: -1,
@@ -622,7 +911,12 @@ let hudCache: HudCache = {
     lightState: "",
     weaponSig: "",
 };
-const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+let dashCache: DashCache = { ready: false, offset: -1, active: false };
+let dashWasCharging = false;
+let dashReadyAnnounced = false;
+const reducedMotionQuery = window.matchMedia(
+    "(prefers-reduced-motion: reduce)",
+);
 
 function cacheDom(): void {
     dom = {
@@ -636,6 +930,7 @@ function cacheDom(): void {
         gamePause: byId("game-pause"),
         gameMute: byId("game-mute"),
         gameSettings: byId("game-settings"),
+        gameBack: byId("game-back"),
         hudTime: byId("hud-time"),
         hudKills: byId("hud-kills"),
         hudLevel: byId("hud-level"),
@@ -646,6 +941,11 @@ function cacheDom(): void {
         canvasWrap: byId("canvas-wrap"),
         game: byId<HTMLCanvasElement>("game"),
         touchDash: byId("touch-dash"),
+        dashStatus: byId("dash-status"),
+        dashRingFill: document.querySelector<SVGCircleElement>(
+            "#dash-ring-fill",
+        )!,
+        dashLive: byId("dash-live"),
         levelupOverlay: byId("levelup-overlay"),
         levelupTitle: byId("levelup-title"),
         levelupCards: byId("levelup-cards"),
@@ -664,6 +964,9 @@ function cacheDom(): void {
         settingsModal: byId("settings-modal"),
         soundToggle: byId("sound-toggle"),
         reducedToggle: byId("reduced-toggle"),
+        dashKeyBtn: byId("dash-key-btn"),
+        dashKeyError: byId("dash-key-error"),
+        dashKeyHint: byId("dash-key-hint"),
         settingsClose: byId("settings-close"),
         live: byId("live"),
     };
@@ -714,10 +1017,33 @@ function createGame(): GameState {
             damageMult: 1,
             radiusBonus: 0,
             dashCdMult: 1,
+            sparkDamageMult: 1,
         },
-        upgrades: { ember: 0, wick: 0, boots: 0, focus: 0, lens: 0, cinder: 0 },
-        weapons: { orbit: 0, bolt: 1, pulse: 0, chain: 0, scatter: 0 },
-        weaponCd: { orbit: 0, bolt: 0, pulse: 0, chain: 0, scatter: 0 },
+        upgrades: {
+            ember: 0,
+            wick: 0,
+            boots: 0,
+            focus: 0,
+            lens: 0,
+            cinder: 0,
+            photon: 0,
+        },
+        weapons: {
+            orbit: 0,
+            bolt: 1,
+            pulse: 0,
+            chain: 0,
+            scatter: 0,
+            sparks: 0,
+        },
+        weaponCd: {
+            orbit: 0,
+            bolt: 0,
+            pulse: 0,
+            chain: 0,
+            scatter: 0,
+            sparks: 0,
+        },
         enemies: [],
         projectiles: [],
         enemyShots: [],
@@ -725,7 +1051,8 @@ function createGame(): GameState {
         effects: [],
         nextEnemyId: 1,
         spawnTimer: 1.1,
-        bossIndex: 0,
+        nextBossAt: 60,
+        bossTier: 0,
         shake: 0,
         flash: 0,
         newBest: false,
@@ -751,6 +1078,7 @@ function startRun(): void {
     dom.pauseOverlay.classList.add("hidden");
     dom.runoverOverlay.classList.add("hidden");
     dom.settingsModal.classList.add("hidden");
+    cancelDashKeyListening();
     pausedBySettings = false;
     currentChoices = [];
     hudCache = {
@@ -762,6 +1090,10 @@ function startRun(): void {
         lightState: "",
         weaponSig: "",
     };
+    dashCache = { ready: false, offset: -1, active: false };
+    dashWasCharging = false;
+    dashReadyAnnounced = false;
+    dom.dashLive.textContent = "";
 
     showScreen("game");
     resizeCanvas();
@@ -791,6 +1123,7 @@ function quitToLobby(): void {
     dom.pauseOverlay.classList.add("hidden");
     dom.runoverOverlay.classList.add("hidden");
     dom.settingsModal.classList.add("hidden");
+    cancelDashKeyListening();
     showScreen("lobby");
     updatePauseButton();
     dom.startBtn.focus({ preventScroll: true });
@@ -851,11 +1184,12 @@ function updateGame(g: GameState, dt: number): void {
 
     updateSpawning(g, dt);
 
-    while (g.bossIndex < BOSS_TIMES.length) {
-        const spawnAt = BOSS_TIMES[g.bossIndex];
-        if (spawnAt === undefined || g.time < spawnAt) break;
-        spawnBoss(g, g.bossIndex);
-        g.bossIndex += 1;
+    while (g.time >= g.nextBossAt) {
+        if (!g.enemies.some((e) => e.kind === "boss" && e.hp > 0)) {
+            spawnBoss(g, g.bossTier);
+            g.bossTier += 1;
+        }
+        g.nextBossAt += 60;
     }
 
     updateEnemies(g, dt);
@@ -960,22 +1294,33 @@ function updateSpawning(g: GameState, dt: number): void {
 function pickEnemyKind(time: number): BasicEnemyKind {
     const roll = Math.random();
     if (time < 20) return roll < 0.55 ? "swarmer" : "chaser";
-    if (time < 50) {
+    if (time < 45) {
         if (roll < 0.4) return "chaser";
         if (roll < 0.75) return "swarmer";
         if (roll < 0.9) return "ranged";
         return "tank";
     }
-    if (time < 110) {
+    if (time < 75) {
         if (roll < 0.3) return "chaser";
-        if (roll < 0.6) return "swarmer";
-        if (roll < 0.8) return "tank";
-        return "ranged";
+        if (roll < 0.55) return "swarmer";
+        if (roll < 0.72) return "ranged";
+        if (roll < 0.87) return "tank";
+        return "spartan";
     }
-    if (roll < 0.25) return "chaser";
-    if (roll < 0.5) return "swarmer";
-    if (roll < 0.78) return "tank";
-    return "ranged";
+    if (time < 110) {
+        if (roll < 0.24) return "chaser";
+        if (roll < 0.46) return "swarmer";
+        if (roll < 0.62) return "ranged";
+        if (roll < 0.78) return "tank";
+        if (roll < 0.9) return "spartan";
+        return "bomber";
+    }
+    if (roll < 0.2) return "chaser";
+    if (roll < 0.4) return "swarmer";
+    if (roll < 0.55) return "ranged";
+    if (roll < 0.73) return "tank";
+    if (roll < 0.88) return "spartan";
+    return "bomber";
 }
 
 function spawnPosition(g: GameState, extra: number): { x: number; y: number } {
@@ -1013,29 +1358,46 @@ function spawnEnemy(g: GameState): void {
         lightReward: cfg.light,
         xpReward: cfg.xp,
         color: cfg.color,
-        fireTimer: 1.4 + Math.random() * 1.4,
+        fireTimer:
+            kind === "bomber" ? BOMBER_FUSE : 1.4 + Math.random() * 1.4,
         orbitCd: 0,
         wobble: Math.random() * TAU,
     });
 }
 
-function spawnBoss(g: GameState, index: number): void {
+function pickBossKind(g: GameState, tier: number): BossKind {
+    if (tier === 0) return "warden";
+    if ((tier + 1) % 4 === 0) return "reaper";
+    const roll = Math.random();
+    if (g.time >= 180 && roll < (g.level >= 9 ? 0.34 : 0.24)) {
+        return "colossus";
+    }
+    if (roll < 0.18) return "herald";
+    if (roll < 0.46) return "cinder";
+    return "warden";
+}
+
+function spawnBoss(g: GameState, tier: number): void {
+    const kind = pickBossKind(g, tier);
+    const cfg = BOSS_CONFIG[kind];
     const pos = spawnPosition(g, 95);
-    const hp = Math.round(230 * (1 + index * 0.85));
+    const hp = Math.round(cfg.hp * (1 + tier * cfg.hpScale));
     g.enemies.push({
         id: g.nextEnemyId++,
         kind: "boss",
+        bossKind: kind,
+        life: kind === "herald" ? 20 + tier * 2 : undefined,
         x: pos.x,
         y: pos.y,
         hp,
         maxHp: hp,
-        radius: 42,
-        speed: 30 + index * 5,
-        damage: 28,
-        lightReward: 25,
-        xpReward: 8,
-        color: "#ff7a90",
-        fireTimer: 0,
+        radius: cfg.radius,
+        speed: cfg.speed + tier * 2,
+        damage: cfg.damage,
+        lightReward: cfg.light,
+        xpReward: cfg.xp,
+        color: cfg.color,
+        fireTimer: kind === "colossus" ? 4 : kind === "herald" ? 2.4 : 1.4,
         orbitCd: 0,
         wobble: Math.random() * TAU,
     });
@@ -1046,12 +1408,12 @@ function spawnBoss(g: GameState, index: number): void {
         age: 0,
         max: 0.9,
         radius: 150,
-        color: "#ff5d6c",
+        color: cfg.color,
         lineWidth: 3,
     });
     g.shake = prefersReduced() ? 0 : 0.45;
-    sfx("boss");
-    announce("A boss has entered the arena.");
+    sfx(kind === "reaper" ? "reaper" : "boss");
+    announce("A " + cfg.name + " has entered the arena.");
 }
 
 function updateEnemies(g: GameState, dt: number): void {
@@ -1062,13 +1424,35 @@ function updateEnemies(g: GameState, dt: number): void {
         if (e.hp <= 0) continue;
         e.orbitCd = Math.max(0, e.orbitCd - dt);
 
+        if (e.life !== undefined) {
+            e.life -= dt;
+            if (e.life <= 0 && e.bossKind === "herald") {
+                spawnBurst(g, e.x, e.y, e.color, 20, 5);
+                g.effects.push({
+                    kind: "ring",
+                    x: e.x,
+                    y: e.y,
+                    age: 0,
+                    max: 0.5,
+                    radius: 80,
+                    color: e.color,
+                    lineWidth: 2,
+                });
+                announce("The Herald slips away.");
+                e.hp = 0;
+                continue;
+            }
+        }
+
         const dx = p.x - e.x;
         const dy = p.y - e.y;
         const dist = Math.hypot(dx, dy) || 1;
         const nx = dx / dist;
         const ny = dy / dist;
 
-        if (e.kind === "ranged") {
+        if (e.kind === "boss") {
+            updateBossEnemy(g, e, dt, dist, nx, ny, lightR);
+        } else if (e.kind === "ranged") {
             if (dist > 260) {
                 e.x += nx * e.speed * dt;
                 e.y += ny * e.speed * dt;
@@ -1085,6 +1469,51 @@ function updateEnemies(g: GameState, dt: number): void {
             if (e.fireTimer <= 0 && dist <= lightR + 80) {
                 e.fireTimer = 2.1 + Math.random() * 0.9;
                 fireEnemyShot(g, e);
+            }
+        } else if (e.kind === "bomber") {
+            e.x += nx * e.speed * dt;
+            e.y += ny * e.speed * dt;
+            if (dist <= 190) {
+                e.fireTimer -= dt;
+                if (e.fireTimer <= 0) {
+                    explodeBomber(g, e);
+                    e.hp = 0;
+                    continue;
+                }
+            }
+        } else if (e.kind === "spartan") {
+            if ((e.dashTime ?? 0) > 0) {
+                e.dashTime = Math.max(0, (e.dashTime ?? 0) - dt);
+                e.x += (e.dashDirX ?? nx) * SPARTAN_DASH_SPEED * dt;
+                e.y += (e.dashDirY ?? ny) * SPARTAN_DASH_SPEED * dt;
+                if (!prefersReduced() && Math.random() < 0.4) {
+                    spawnParticle(g, e.x, e.y, e.color, 2, 0.28);
+                }
+            } else {
+                e.x += nx * e.speed * dt;
+                e.y += ny * e.speed * dt;
+                e.fireTimer -= dt;
+                if (e.fireTimer <= 0) {
+                    if (dist <= lightR + 40) {
+                        e.fireTimer =
+                            SPARTAN_DASH_INTERVAL * (0.85 + Math.random() * 0.3);
+                        e.dashTime = SPARTAN_DASH_TIME;
+                        e.dashDirX = nx;
+                        e.dashDirY = ny;
+                        g.effects.push({
+                            kind: "ring",
+                            x: e.x,
+                            y: e.y,
+                            age: 0,
+                            max: 0.3,
+                            radius: 44,
+                            color: e.color,
+                            lineWidth: 2,
+                        });
+                    } else {
+                        e.fireTimer = 0.5;
+                    }
+                }
             }
         } else {
             let moveX = nx;
@@ -1112,6 +1541,159 @@ function updateEnemies(g: GameState, dt: number): void {
     }
 
     g.enemies = g.enemies.filter((e) => e.hp > 0);
+}
+
+function updateBossEnemy(
+    g: GameState,
+    e: Enemy,
+    dt: number,
+    dist: number,
+    nx: number,
+    ny: number,
+    lightR: number,
+): void {
+    const kind = e.bossKind ?? "warden";
+
+    if (kind === "cinder") {
+        if (dist > 270) {
+            e.x += nx * e.speed * dt;
+            e.y += ny * e.speed * dt;
+        } else if (dist < 185) {
+            e.x -= nx * e.speed * dt;
+            e.y -= ny * e.speed * dt;
+        } else {
+            const side = Math.sin(g.time * 1.1 + e.wobble) >= 0 ? 1 : -1;
+            e.x += -ny * e.speed * 0.55 * dt * side;
+            e.y += nx * e.speed * 0.55 * dt * side;
+        }
+        e.fireTimer -= dt;
+        if (e.fireTimer <= 0 && dist <= lightR + 140) {
+            e.fireTimer = 2.3 + Math.random() * 0.7;
+            fireBossSpread(g, e);
+        }
+        return;
+    }
+
+    if (kind === "herald") {
+        if ((e.dashTime ?? 0) > 0) {
+            e.dashTime = Math.max(0, (e.dashTime ?? 0) - dt);
+            e.x += (e.dashDirX ?? nx) * 620 * dt;
+            e.y += (e.dashDirY ?? ny) * 620 * dt;
+            if (!prefersReduced() && Math.random() < 0.5) {
+                spawnParticle(g, e.x, e.y, e.color, 2, 0.3);
+            }
+            return;
+        }
+        e.fireTimer -= dt;
+        if (e.fireTimer <= 0) {
+            e.fireTimer = 2.6 + Math.random() * 0.8;
+            e.dashTime = 0.22;
+            e.dashDirX = nx;
+            e.dashDirY = ny;
+            g.effects.push({
+                kind: "ring",
+                x: e.x,
+                y: e.y,
+                age: 0,
+                max: 0.3,
+                radius: 38,
+                color: e.color,
+                lineWidth: 2,
+            });
+            return;
+        }
+        e.x += nx * e.speed * dt;
+        e.y += ny * e.speed * dt;
+        return;
+    }
+
+    if (kind === "colossus") {
+        e.x += nx * e.speed * dt;
+        e.y += ny * e.speed * dt;
+        e.fireTimer -= dt;
+        if (e.fireTimer <= 0) {
+            e.fireTimer = 4.4;
+            spawnBossAdds(g, e);
+        }
+        return;
+    }
+
+    e.x += nx * e.speed * dt;
+    e.y += ny * e.speed * dt;
+}
+
+function fireBossSpread(g: GameState, e: Enemy): void {
+    const dx = g.player.x - e.x;
+    const dy = g.player.y - e.y;
+    const base = Math.atan2(dy, dx);
+    const speed = 172;
+    for (const offset of [-0.28, 0, 0.28]) {
+        g.enemyShots.push({
+            x: e.x,
+            y: e.y,
+            vx: Math.cos(base + offset) * speed,
+            vy: Math.sin(base + offset) * speed,
+            life: 5,
+            damage: e.damage,
+            radius: 7,
+            dead: false,
+        });
+    }
+}
+
+function spawnBossAdds(g: GameState, e: Enemy): void {
+    const cfg = ENEMY_CONFIG.swarmer;
+    const hpScale = 1 + Math.min(0.55, g.time * 0.003);
+    for (let i = 0; i < 2; i += 1) {
+        const angle = Math.random() * TAU;
+        const hp = Math.round(cfg.hp * hpScale);
+        g.enemies.push({
+            id: g.nextEnemyId++,
+            kind: "swarmer",
+            x: clamp(e.x + Math.cos(angle) * e.radius, 24, ARENA_W - 24),
+            y: clamp(e.y + Math.sin(angle) * e.radius, 24, ARENA_H - 24),
+            hp,
+            maxHp: hp,
+            radius: cfg.radius,
+            speed: cfg.speed,
+            damage: cfg.damage,
+            lightReward: cfg.light,
+            xpReward: cfg.xp,
+            color: cfg.color,
+            fireTimer: 1.4 + Math.random() * 1.4,
+            orbitCd: 0,
+            wobble: Math.random() * TAU,
+        });
+    }
+    g.effects.push({
+        kind: "ring",
+        x: e.x,
+        y: e.y,
+        age: 0,
+        max: 0.45,
+        radius: 90,
+        color: e.color,
+        lineWidth: 2,
+    });
+}
+
+function explodeBomber(g: GameState, e: Enemy): void {
+    g.effects.push({
+        kind: "ring",
+        x: e.x,
+        y: e.y,
+        age: 0,
+        max: 0.42,
+        radius: BOMBER_BLAST,
+        color: "#ffb35e",
+        lineWidth: 3,
+    });
+    spawnBurst(g, e.x, e.y, e.color, 16, 5);
+    if (!prefersReduced()) g.shake = Math.max(g.shake, 0.34);
+    sfx("bomb");
+    if (distance(e.x, e.y, g.player.x, g.player.y) <= BOMBER_BLAST + g.player.radius) {
+        damagePlayer(g, e);
+    }
 }
 
 function fireEnemyShot(g: GameState, e: Enemy): void {
@@ -1170,10 +1752,7 @@ function updateEnemyShots(g: GameState, dt: number): void {
             shot.dead = true;
             continue;
         }
-        if (
-            distance(shot.x, shot.y, p.x, p.y) <
-            shot.radius + p.radius
-        ) {
+        if (distance(shot.x, shot.y, p.x, p.y) < shot.radius + p.radius) {
             shot.dead = true;
             if (p.invuln <= 0) {
                 g.light -= shot.damage;
@@ -1201,10 +1780,7 @@ function playShoot(g: GameState): void {
     sfx("shoot");
 }
 
-function nearestEnemy(
-    g: GameState,
-    maxDistance: number,
-): Enemy | null {
+function nearestEnemy(g: GameState, maxDistance: number): Enemy | null {
     let best: Enemy | null = null;
     let bestDist = maxDistance;
     for (const e of g.enemies) {
@@ -1247,7 +1823,10 @@ function updateOrbit(g: GameState, lightR: number): void {
         for (const e of g.enemies) {
             if (e.hp <= 0 || e.orbitCd > 0) continue;
             if (distance(g.player.x, g.player.y, e.x, e.y) > lightR) continue;
-            if (distance(blade.x, blade.y, e.x, e.y) <= bladeRadius + e.radius) {
+            if (
+                distance(blade.x, blade.y, e.x, e.y) <=
+                bladeRadius + e.radius
+            ) {
                 e.orbitCd = 0.45;
                 damageEnemy(g, e, damage);
             }
@@ -1270,7 +1849,10 @@ function updateWeapons(g: GameState, dt: number): void {
     if (g.weapons.bolt > 0 && g.weaponCd.bolt <= 0) fireBolt(g, lightR);
     if (g.weapons.pulse > 0 && g.weaponCd.pulse <= 0) firePulse(g, lightR);
     if (g.weapons.chain > 0 && g.weaponCd.chain <= 0) fireChain(g, lightR);
-    if (g.weapons.scatter > 0 && g.weaponCd.scatter <= 0) fireScatter(g, lightR);
+    if (g.weapons.scatter > 0 && g.weaponCd.scatter <= 0)
+        fireScatter(g, lightR);
+    if (g.weapons.sparks > 0 && g.weaponCd.sparks <= 0)
+        fireSparks(g, lightR);
 }
 
 function spawnPlayerProjectile(
@@ -1281,18 +1863,21 @@ function spawnPlayerProjectile(
     radius: number,
     pierce: number,
     color: string,
+    turnRate = 0,
+    life = 3,
 ): void {
     g.projectiles.push({
         x: g.player.x,
         y: g.player.y,
         vx: Math.cos(angle) * speed,
         vy: Math.sin(angle) * speed,
-        life: 3,
+        life,
         damage,
         radius,
         pierce,
         hitIds: [],
         color,
+        turnRate,
         dead: false,
     });
 }
@@ -1304,7 +1889,9 @@ function fireBolt(g: GameState, lightR: number): void {
     const damage = (10 + 4 * (level - 1)) * g.stats.damageMult;
     const baseAngle = Math.atan2(target.y - g.player.y, target.x - g.player.x);
     const evolved = level >= 3;
-    const angles = evolved ? [baseAngle - 0.055, baseAngle + 0.055] : [baseAngle];
+    const angles = evolved
+        ? [baseAngle - 0.055, baseAngle + 0.055]
+        : [baseAngle];
     for (const angle of angles) {
         spawnPlayerProjectile(
             g,
@@ -1344,12 +1931,45 @@ function fireScatter(g: GameState, lightR: number): void {
     playShoot(g);
 }
 
+function fireSparks(g: GameState, lightR: number): void {
+    const target = nearestEnemy(g, lightR);
+    if (!target) return;
+    const level = g.weapons.sparks;
+    const evolved = level >= 3;
+    const count = evolved ? 9 : 3 + level;
+    const damage =
+        (6 + 2.5 * (level - 1)) *
+        g.stats.damageMult *
+        g.stats.sparkDamageMult;
+    const baseAngle = Math.atan2(target.y - g.player.y, target.x - g.player.x);
+    const spread = 0.5;
+    const speed = evolved ? 300 : 262;
+    const turnRate = evolved ? 9.5 : 6.5;
+    const pierce = evolved ? 2 : 1;
+    const life = evolved ? 1.6 : 1.45;
+    for (let i = 0; i < count; i += 1) {
+        const offset =
+            (i / (count - 1) - 0.5) * spread + (Math.random() - 0.5) * 0.12;
+        spawnPlayerProjectile(
+            g,
+            baseAngle + offset,
+            speed,
+            damage,
+            evolved ? 5 : 4,
+            pierce,
+            WEAPONS.sparks.color,
+            turnRate,
+            life,
+        );
+    }
+    g.weaponCd.sparks = Math.max(0.7, 1.4 - (level - 1) * 0.18);
+    playShoot(g);
+}
+
 function firePulse(g: GameState, lightR: number): void {
     const level = g.weapons.pulse;
     const radius =
-        level >= 3
-            ? lightR
-            : Math.min(lightR, lightR * 0.55 + level * 14 + 20);
+        level >= 3 ? lightR : Math.min(lightR, lightR * 0.55 + level * 14 + 20);
     const damage = (14 + 7 * (level - 1)) * g.stats.damageMult;
     for (const e of g.enemies) {
         if (e.hp <= 0) continue;
@@ -1422,6 +2042,33 @@ function updateProjectiles(g: GameState, dt: number): void {
     const lightR = lightRadiusOf(g);
     for (const p of g.projectiles) {
         if (p.dead) continue;
+        if (p.turnRate > 0) {
+            let target: Enemy | null = null;
+            let bestDist = Infinity;
+            for (const e of g.enemies) {
+                if (e.hp <= 0) continue;
+                if (distance(e.x, e.y, g.player.x, g.player.y) > lightR) {
+                    continue;
+                }
+                const d = distance(e.x, e.y, p.x, p.y);
+                if (d < bestDist) {
+                    target = e;
+                    bestDist = d;
+                }
+            }
+            if (target) {
+                const speed = Math.hypot(p.vx, p.vy) || 1;
+                const current = Math.atan2(p.vy, p.vx);
+                const desired = Math.atan2(target.y - p.y, target.x - p.x);
+                let diff = desired - current;
+                while (diff > Math.PI) diff -= TAU;
+                while (diff < -Math.PI) diff += TAU;
+                const maxTurn = p.turnRate * dt;
+                const angle = current + clamp(diff, -maxTurn, maxTurn);
+                p.vx = Math.cos(angle) * speed;
+                p.vy = Math.sin(angle) * speed;
+            }
+        }
         p.life -= dt;
         p.x += p.vx * dt;
         p.y += p.vy * dt;
@@ -1521,15 +2168,21 @@ function rollChoices(g: GameState): UpgradeChoice[] {
                 kind: "weapon",
                 weapon: id,
                 evolve: evolves,
-                title: evolves ? "Evolve · " + cfg.evolvedName : "Upgrade · " + cfg.name,
-                desc: evolves ? cfg.evoDesc : "Level " + (level + 1) + ". " + cfg.desc,
+                title: evolves
+                    ? "Evolve · " + cfg.evolvedName
+                    : "Upgrade · " + cfg.name,
+                desc: evolves
+                    ? cfg.evoDesc
+                    : "Level " + (level + 1) + ". " + cfg.desc,
                 meta: evolves ? "Evolution" : "Level " + (level + 1) + " / 3",
             });
         }
     }
 
     for (const id of STAT_IDS) {
-        if (g.upgrades[id] < STAT_UPGRADES[id].max) {
+        const cfg = STAT_UPGRADES[id];
+        if (cfg.requires && g.weapons[cfg.requires] <= 0) continue;
+        if (g.upgrades[id] < cfg.max) {
             candidates.push(statChoice(g, id));
         }
     }
@@ -1563,13 +2216,25 @@ function openLevelUp(g: GameState): void {
     focusInside(dom.levelupOverlay);
 }
 
+function closeLevelUp(): void {
+    const g = state.game;
+    if (!g || !g.levelUpOpen) return;
+    // Deferring the pick: pendingPicks stays untouched. Resuming re-opens the
+    // level-up overlay before the player can act, so the choice is not lost.
+    g.levelUpOpen = false;
+    g.paused = true;
+    dom.levelupOverlay.classList.add("hidden");
+    currentChoices = [];
+    dom.levelupCards.innerHTML = "";
+    updatePauseButton();
+}
+
 function renderChoices(g: GameState): void {
     dom.levelupCards.innerHTML = "";
     currentChoices.forEach((choice, index) => {
         const button = document.createElement("button");
         button.type = "button";
-        button.className =
-            "upgrade-card" + (choice.evolve ? " evolved" : "");
+        button.className = "upgrade-card" + (choice.evolve ? " evolved" : "");
         button.setAttribute("data-index", String(index));
 
         const key = document.createElement("span");
@@ -1593,7 +2258,8 @@ function renderChoices(g: GameState): void {
         dom.levelupCards.appendChild(button);
     });
     if (g.levelUpOpen) {
-        const first = dom.levelupCards.querySelector<HTMLElement>(".upgrade-card");
+        const first =
+            dom.levelupCards.querySelector<HTMLElement>(".upgrade-card");
         if (first) first.focus({ preventScroll: true });
     }
 }
@@ -1610,9 +2276,11 @@ function applyStat(g: GameState, id: StatId): void {
     } else if (id === "focus") {
         g.stats.damageMult += 0.15;
     } else if (id === "lens") {
-        g.stats.radiusBonus += 14;
-    } else {
+        g.stats.radiusBonus += 10;
+    } else if (id === "cinder") {
         g.stats.dashCdMult = Math.max(0.45, g.stats.dashCdMult - 0.12);
+    } else if (id === "photon") {
+        g.stats.sparkDamageMult += 0.3;
     }
 }
 
@@ -1789,7 +2457,8 @@ function renderGame(g: GameState): void {
     ctx.restore();
 
     if (g.flash > 0 && !reduced) {
-        ctx.fillStyle = "rgba(255, 80, 90, " + (g.flash * 0.34).toFixed(3) + ")";
+        ctx.fillStyle =
+            "rgba(255, 80, 90, " + (g.flash * 0.34).toFixed(3) + ")";
         ctx.fillRect(0, 0, VIEW_W, VIEW_H);
     }
 }
@@ -1854,18 +2523,20 @@ function drawEnemies(g: GameState): void {
             continue;
         }
 
-        const angle = Math.atan2(
-            g.player.y - e.y,
-            g.player.x - e.x,
-        );
+        const angle = Math.atan2(g.player.y - e.y, g.player.x - e.x);
 
         ctx.save();
         ctx.translate(sx, sy);
         drawEnemyBody(g, e, angle);
         ctx.restore();
 
-        if (e.kind === "boss" || e.kind === "tank") {
-            const width = e.kind === "boss" ? 76 : 38;
+        if (
+            e.kind === "boss" ||
+            e.kind === "tank" ||
+            e.kind === "spartan"
+        ) {
+            const width =
+                e.kind === "boss" ? 76 : e.kind === "tank" ? 38 : 42;
             const barY = -e.radius - (e.kind === "boss" ? 16 : 10);
             ctx.fillStyle = "rgba(0, 0, 0, 0.62)";
             ctx.fillRect(sx - width / 2, sy + barY, width, 4);
@@ -1882,8 +2553,9 @@ function drawEnemies(g: GameState): void {
 
 function drawEnemyBody(g: GameState, e: Enemy, angle: number): void {
     const color = e.color;
+    const isBoss = e.kind === "boss";
     ctx.shadowColor = color;
-    ctx.shadowBlur = e.kind === "boss" ? 28 : 13;
+    ctx.shadowBlur = isBoss ? 28 : 13;
     ctx.fillStyle = color;
     ctx.strokeStyle = color;
     ctx.lineWidth = 2;
@@ -1917,15 +2589,7 @@ function drawEnemyBody(g: GameState, e: Enemy, angle: number): void {
         ctx.arc(0, 0, e.radius * 0.3, 0, TAU);
         ctx.fill();
     } else if (e.kind === "tank") {
-        ctx.beginPath();
-        for (let i = 0; i < 6; i += 1) {
-            const a = (i / 6) * TAU;
-            const px = Math.cos(a) * e.radius;
-            const py = Math.sin(a) * e.radius;
-            if (i === 0) ctx.moveTo(px, py);
-            else ctx.lineTo(px, py);
-        }
-        ctx.closePath();
+        tracePolygon(6, e.radius);
         ctx.fill();
         ctx.shadowBlur = 0;
         ctx.fillStyle = "#100a18";
@@ -1955,6 +2619,220 @@ function drawEnemyBody(g: GameState, e: Enemy, angle: number): void {
         ctx.beginPath();
         ctx.arc(e.radius * 0.42, 0, 3, 0, TAU);
         ctx.fill();
+    } else if (e.kind === "spartan") {
+        drawSpartanEnemy(g, e, angle);
+    } else if (e.kind === "bomber") {
+        drawBomberEnemy(g, e);
+    } else {
+        drawBossEnemy(g, e, angle, e.bossKind ?? "warden");
+    }
+}
+
+function tracePolygon(sides: number, radius: number): void {
+    ctx.beginPath();
+    for (let i = 0; i < sides; i += 1) {
+        const a = (i / sides) * TAU;
+        const px = Math.cos(a) * radius;
+        const py = Math.sin(a) * radius;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+}
+
+function drawSpartanEnemy(g: GameState, e: Enemy, angle: number): void {
+    const r = e.radius;
+    const pulse = 1 + 0.05 * Math.sin(g.time * 8 + e.wobble);
+    ctx.save();
+    ctx.rotate(angle + Math.PI / 2);
+    ctx.scale(pulse, pulse);
+
+    ctx.strokeStyle = "#f4eedb";
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(0, -r * 1.3);
+    ctx.lineTo(0, r * 0.92);
+    ctx.stroke();
+
+    ctx.fillStyle = "#fff8e6";
+    ctx.beginPath();
+    ctx.moveTo(0, -r * 1.62);
+    ctx.lineTo(r * 0.16, -r * 1.12);
+    ctx.lineTo(-r * 0.16, -r * 1.12);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = e.color;
+    ctx.beginPath();
+    ctx.moveTo(0, -r * 0.9);
+    ctx.lineTo(r * 0.8, -r * 0.16);
+    ctx.lineTo(r * 0.56, r * 0.6);
+    ctx.lineTo(0, r * 0.94);
+    ctx.lineTo(-r * 0.56, r * 0.6);
+    ctx.lineTo(-r * 0.8, -r * 0.16);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = "#18140c";
+    ctx.fillRect(-r * 0.46, -r * 0.28, r * 0.92, r * 0.22);
+    ctx.strokeStyle = "rgba(20, 18, 12, 0.7)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.5, r * 0.2);
+    ctx.lineTo(r * 0.5, r * 0.2);
+    ctx.moveTo(0, -r * 0.02);
+    ctx.lineTo(0, r * 0.78);
+    ctx.stroke();
+    ctx.restore();
+}
+
+function drawBomberEnemy(g: GameState, e: Enemy): void {
+    const r = e.radius;
+    const fuse = clamp(e.fireTimer / BOMBER_FUSE, 0, 1);
+    const rate = 5 + (1 - fuse) * 18;
+    const pulse = 0.5 + 0.5 * Math.sin(g.time * rate + e.wobble);
+
+    ctx.fillStyle = e.color;
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.86, 0, TAU);
+    ctx.fill();
+
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = "#2a1206";
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.46, 0, TAU);
+    ctx.fill();
+
+    ctx.strokeStyle = hexToRgba("#ff5d3a", 0.35 + 0.55 * pulse);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, r + 3 + 9 * pulse, 0, TAU);
+    ctx.stroke();
+
+    ctx.strokeStyle = hexToRgba("#ffd9a0", 0.7);
+    ctx.lineWidth = 1.5;
+    for (let i = 0; i < 3; i += 1) {
+        const a = (i / 3) * TAU;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a) * r * 0.3, Math.sin(a) * r * 0.3);
+        ctx.lineTo(Math.cos(a) * r * 0.7, Math.sin(a) * r * 0.7);
+        ctx.stroke();
+    }
+
+    ctx.fillStyle = pulse > 0.5 ? "#fff2c4" : "#ff7a3a";
+    ctx.beginPath();
+    ctx.arc(0, -r * 0.95, 2 + 2 * pulse, 0, TAU);
+    ctx.fill();
+}
+
+function drawBossEnemy(
+    g: GameState,
+    e: Enemy,
+    angle: number,
+    kind: BossKind,
+): void {
+    const r = e.radius;
+
+    if (kind === "cinder") {
+        ctx.rotate(g.time * 0.8 + e.wobble);
+        ctx.beginPath();
+        const spikes = 12;
+        for (let i = 0; i < spikes * 2; i += 1) {
+            const a = (i / (spikes * 2)) * TAU;
+            const radius = i % 2 === 0 ? r : r * 0.72;
+            const px = Math.cos(a) * radius;
+            const py = Math.sin(a) * radius;
+            if (i === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = "#2a1206";
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 0.48, 0, TAU);
+        ctx.fill();
+        ctx.strokeStyle = e.color;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 0.52, 0, TAU);
+        ctx.stroke();
+        ctx.fillStyle = "#ffd27a";
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 0.18, 0, TAU);
+        ctx.fill();
+    } else if (kind === "herald") {
+        ctx.rotate(angle);
+        ctx.beginPath();
+        ctx.moveTo(r * 1.05, 0);
+        ctx.lineTo(-r * 0.55, r * 0.7);
+        ctx.lineTo(-r * 0.22, 0);
+        ctx.lineTo(-r * 0.55, -r * 0.7);
+        ctx.closePath();
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = "#08202a";
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 0.3, 0, TAU);
+        ctx.fill();
+        ctx.strokeStyle = hexToRgba(e.color, 0.7);
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 6]);
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 0.92, 0, TAU);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = "#d8fbff";
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 0.12, 0, TAU);
+        ctx.fill();
+    } else if (kind === "colossus") {
+        ctx.rotate(g.time * 0.25 + e.wobble);
+        tracePolygon(6, r);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = "#100a18";
+        tracePolygon(6, r * 0.64);
+        ctx.fill();
+        ctx.strokeStyle = e.color;
+        ctx.lineWidth = 3;
+        tracePolygon(6, r * 0.64);
+        ctx.stroke();
+        ctx.fillStyle = e.color;
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 0.22, 0, TAU);
+        ctx.fill();
+    } else if (kind === "reaper") {
+        const pulse = 0.5 + 0.5 * Math.sin(g.time * 5 + e.wobble);
+        ctx.strokeStyle = hexToRgba(e.color, 0.3 + 0.5 * pulse);
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 1.22 + 8 * pulse, 0, TAU);
+        ctx.stroke();
+        ctx.strokeStyle = hexToRgba("#ff5d8a", 0.25 + 0.35 * (1 - pulse));
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 1.02, 0, TAU);
+        ctx.stroke();
+        ctx.fillStyle = e.color;
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 0.68, 0, TAU);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = "#100a18";
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 0.45, 0, TAU);
+        ctx.fill();
+        ctx.fillStyle = "#ffe0ff";
+        ctx.beginPath();
+        ctx.arc(-r * 0.16, -r * 0.08, r * 0.09, 0, TAU);
+        ctx.arc(r * 0.16, -r * 0.08, r * 0.09, 0, TAU);
+        ctx.fill();
+        ctx.strokeStyle = hexToRgba("#ffe0ff", 0.8);
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(0, r * 0.08, r * 0.2, Math.PI * 0.15, Math.PI * 0.85);
+        ctx.stroke();
     } else {
         ctx.rotate(g.time * 0.5 + e.wobble);
         ctx.beginPath();
@@ -1974,7 +2852,7 @@ function drawEnemyBody(g: GameState, e: Enemy, angle: number): void {
         ctx.beginPath();
         ctx.arc(0, 0, e.radius * 0.58, 0, TAU);
         ctx.fill();
-        ctx.strokeStyle = color;
+        ctx.strokeStyle = e.color;
         ctx.lineWidth = 3;
         ctx.beginPath();
         ctx.arc(0, 0, e.radius * 0.58, 0, TAU);
@@ -2125,13 +3003,7 @@ function drawEffects(g: GameState): void {
             ctx.strokeStyle = hexToRgba(effect.color, alpha);
             ctx.lineWidth = effect.lineWidth * (1 - t * 0.7) + 0.5;
             ctx.beginPath();
-            ctx.arc(
-                effect.x - g.camX,
-                effect.y - g.camY,
-                radius,
-                0,
-                TAU,
-            );
+            ctx.arc(effect.x - g.camX, effect.y - g.camY, radius, 0, TAU);
             ctx.stroke();
             ctx.restore();
         } else {
@@ -2232,13 +3104,7 @@ function drawRangeRing(g: GameState): void {
     ctx.lineWidth = 1.5;
     ctx.setLineDash([7, 11]);
     ctx.beginPath();
-    ctx.arc(
-        g.player.x - g.camX,
-        g.player.y - g.camY,
-        radius,
-        0,
-        TAU,
-    );
+    ctx.arc(g.player.x - g.camX, g.player.y - g.camY, radius, 0, TAU);
     ctx.stroke();
     ctx.restore();
 }
@@ -2276,6 +3142,42 @@ function rebuildWeaponRow(g: GameState): void {
     }
 }
 
+function updateDashIndicator(g: GameState): void {
+    const total = DASH_COOLDOWN * g.stats.dashCdMult;
+    const remaining = Math.max(0, g.player.dashCooldown);
+    const ready = remaining <= 0;
+    const active = g.player.dashTime > 0;
+    const progress = ready
+        ? 1
+        : clamp(1 - remaining / Math.max(0.001, total), 0, 1);
+    const offset = ready ? 0 : DASH_RING_LENGTH * (1 - progress);
+    const roundedOffset = Math.round(offset);
+
+    if (
+        roundedOffset !== dashCache.offset ||
+        ready !== dashCache.ready ||
+        active !== dashCache.active
+    ) {
+        dom.dashStatus.dataset.ready = String(ready);
+        dom.dashStatus.dataset.active = String(active);
+        dom.dashRingFill.style.setProperty(
+            "stroke-dashoffset",
+            String(roundedOffset),
+        );
+        dashCache = { ready, offset: roundedOffset, active };
+    }
+
+    if (!ready) {
+        dashWasCharging = true;
+    } else if (dashWasCharging) {
+        if (!dashReadyAnnounced) {
+            dom.dashLive.textContent = "Dash ready.";
+            dashReadyAnnounced = true;
+        }
+        dashWasCharging = false;
+    }
+}
+
 function updateHud(g: GameState): void {
     const time = Math.floor(g.time);
     if (time !== hudCache.time) {
@@ -2296,7 +3198,10 @@ function updateHud(g: GameState): void {
     if (light !== hudCache.light) {
         dom.lightValue.textContent = String(light);
         dom.lightTrack.setAttribute("aria-valuenow", String(light));
-        dom.lightTrack.setAttribute("aria-valuemax", String(Math.round(g.maxLight)));
+        dom.lightTrack.setAttribute(
+            "aria-valuemax",
+            String(Math.round(g.maxLight)),
+        );
         hudCache.light = light;
     }
     if (pct !== hudCache.lightPct) {
@@ -2315,6 +3220,8 @@ function updateHud(g: GameState): void {
         rebuildWeaponRow(g);
         hudCache.weaponSig = sig;
     }
+
+    updateDashIndicator(g);
 }
 
 function updateLobby(): void {
@@ -2324,15 +3231,19 @@ function updateLobby(): void {
 // ============================================================
 // Settings, pause & overlays
 // ============================================================
+// Overlay invariant: at most one of #levelup-overlay, #pause-overlay, and
+// #runover-overlay is visible at a time. #settings-modal may sit above them.
+// Escape must always reach a usable overlay (or cancel a key rebind).
+
 function updatePauseButton(): void {
     const g = state.game;
     const show = Boolean(
         state.screen === "game" &&
-            g &&
-            g.active &&
-            !g.over &&
-            !g.paused &&
-            !g.levelUpOpen,
+        g &&
+        g.active &&
+        !g.over &&
+        !g.paused &&
+        !g.levelUpOpen,
     );
     dom.gamePause.classList.toggle("hidden", !show);
 }
@@ -2387,13 +3298,76 @@ function updateSoundUi(): void {
     }
 }
 
+function updateDashKeyUi(): void {
+    dom.dashKeyBtn.textContent = formatKey(state.settings.dashKey);
+    dom.dashKeyBtn.removeAttribute("aria-pressed");
+    dom.dashKeyBtn.removeAttribute("data-listening");
+}
+
+function updateDashKeyHint(): void {
+    dom.dashKeyHint.textContent =
+        "Current: " +
+        formatKey(state.settings.dashKey) +
+        ". Press any key to rebind. Right-click always dashes.";
+}
+
+function showDashKeyError(message: string): void {
+    dom.dashKeyError.textContent = message;
+    dom.dashKeyError.classList.remove("hidden");
+}
+
+function beginDashKeyListening(): void {
+    listeningForKey = true;
+    previousDashKey = state.settings.dashKey;
+    dom.dashKeyBtn.setAttribute("data-listening", "true");
+    dom.dashKeyBtn.textContent = "Press a key…";
+    dom.dashKeyError.classList.add("hidden");
+    dom.dashKeyBtn.focus({ preventScroll: true });
+}
+
+function cancelDashKeyListening(): void {
+    if (previousDashKey !== null) {
+        state.settings.dashKey = previousDashKey;
+    }
+    listeningForKey = false;
+    previousDashKey = null;
+    dom.dashKeyBtn.removeAttribute("data-listening");
+    updateDashKeyUi();
+    dom.dashKeyError.classList.add("hidden");
+}
+
+function attemptBindDashKey(code: string): void {
+    if (hasBindConflict(code)) {
+        showDashKeyError("That key is reserved.");
+        return;
+    }
+    if (!code || MODIFIER_ONLY_CODES.has(code)) {
+        showDashKeyError("Choose a non-modifier key.");
+        return;
+    }
+
+    state.settings.dashKey = code;
+    saveSettings();
+    listeningForKey = false;
+    previousDashKey = null;
+    dom.dashKeyBtn.removeAttribute("data-listening");
+    updateDashKeyUi();
+    updateDashKeyHint();
+    dom.dashKeyError.classList.add("hidden");
+    uiClick();
+}
+
 function applySettingsUi(): void {
     dom.reducedToggle.setAttribute(
         "aria-pressed",
         state.settings.reducedEffects ? "true" : "false",
     );
-    dom.reducedToggle.textContent = state.settings.reducedEffects ? "On" : "Off";
+    dom.reducedToggle.textContent = state.settings.reducedEffects
+        ? "On"
+        : "Off";
     document.body.classList.toggle("reduced", state.settings.reducedEffects);
+    updateDashKeyUi();
+    updateDashKeyHint();
     updateSoundUi();
 }
 
@@ -2430,6 +3404,7 @@ function openSettings(): void {
 }
 
 function closeSettings(): void {
+    cancelDashKeyListening();
     dom.settingsModal.classList.add("hidden");
     const restoreFocus = lastFocusedElement;
     lastFocusedElement = null;
@@ -2468,6 +3443,11 @@ function resumeGame(): void {
     const g = state.game;
     if (!g || !g.active || g.over || g.levelUpOpen) return;
     if (!dom.settingsModal.classList.contains("hidden")) return;
+    // A pick deferred with Escape must be honored before play resumes.
+    if (g.pendingPicks > 0 && !g.levelUpOpen) {
+        openLevelUp(g);
+        return;
+    }
     g.paused = false;
     dom.pauseOverlay.classList.add("hidden");
     lastFrame = performance.now();
@@ -2502,6 +3482,17 @@ function digitIndex(code: string): number {
 }
 
 function onKeyDown(e: KeyboardEvent): void {
+    if (listeningForKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.code === "Escape") {
+            cancelDashKeyListening();
+        } else {
+            attemptBindDashKey(e.code);
+        }
+        return;
+    }
+
     const game = state.game;
     const settingsOpen = !dom.settingsModal.classList.contains("hidden");
 
@@ -2516,6 +3507,12 @@ function onKeyDown(e: KeyboardEvent): void {
     }
 
     if (game && game.levelUpOpen) {
+        if (e.code === "Escape") {
+            e.preventDefault();
+            closeLevelUp();
+            pauseGame(true);
+            return;
+        }
         const index = digitIndex(e.code);
         if (index !== -1) {
             e.preventDefault();
@@ -2575,11 +3572,7 @@ function onKeyDown(e: KeyboardEvent): void {
         return;
     }
 
-    if (
-        e.code === "Space" ||
-        e.code === "ShiftLeft" ||
-        e.code === "ShiftRight"
-    ) {
+    if (e.code === state.settings.dashKey) {
         e.preventDefault();
         if (!e.repeat) tryDash(game);
     }
@@ -2590,7 +3583,11 @@ function onKeyUp(e: KeyboardEvent): void {
     if (game) game.keys.delete(e.code);
 }
 
-function setPointerTarget(g: GameState, clientX: number, clientY: number): void {
+function setPointerTarget(
+    g: GameState,
+    clientX: number,
+    clientY: number,
+): void {
     const world = screenToWorld(g, clientX, clientY);
     g.pointerX = world.x;
     g.pointerY = world.y;
@@ -2652,6 +3649,7 @@ function bindEvents(): void {
 
     dom.lobbySettings.addEventListener("click", openSettings);
     dom.gameSettings.addEventListener("click", openSettings);
+    dom.gameBack.addEventListener("click", quitToLobby);
     dom.lobbyMute.addEventListener("click", toggleMute);
     dom.gameMute.addEventListener("click", toggleMute);
     dom.gamePause.addEventListener("click", () => {
@@ -2695,6 +3693,13 @@ function bindEvents(): void {
         saveSettings();
         applySettingsUi();
         uiClick();
+    });
+    dom.dashKeyBtn.addEventListener("click", () => {
+        if (listeningForKey) {
+            cancelDashKeyListening();
+        } else {
+            beginDashKeyListening();
+        }
     });
     dom.settingsClose.addEventListener("click", closeSettings);
     dom.settingsModal.addEventListener("click", (e) => {

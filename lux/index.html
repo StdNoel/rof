@@ -76,8 +76,8 @@
           </div>
 
           <p class="controls-hint keyboard-hint">
-            <kbd>WASD</kbd> / <kbd>Arrows</kbd> move &middot; hold <kbd>LMB</kbd> toward the cursor &middot;
-            <kbd>Space</kbd> / <kbd>Shift</kbd> / <kbd>right-click</kbd> dash &middot; <kbd>Esc</kbd> pause
+            <kbd>WASD</kbd> / <kbd>Arrows</kbd> move &middot; hold <kbd>LMB</kbd> toward the cursor &middot; dash with
+            your bound key or <kbd>right-click</kbd> &middot; <kbd>Esc</kbd> pause
           </p>
           <p class="controls-hint touch-hint">
             Drag to move &middot; tap <b>DASH</b> in the arena &middot; pause from the HUD
@@ -88,6 +88,10 @@
       <!-- ===== GAME ===== -->
       <section id="screen-game" class="screen">
         <header class="hud">
+          <button id="game-back" class="back-link hud-back" type="button" aria-label="Back to Lux lobby">
+            <span aria-hidden="true">&larr;</span>
+            <span class="back-label">Quit</span>
+          </button>
           <div class="hud-stats">
             <div class="hud-stat">
               <span id="hud-time" class="hud-value">00:00</span>
@@ -162,8 +166,17 @@
           <canvas
             id="game"
             tabindex="0"
-            aria-label="Lux arena. Move with WASD or the arrow keys, hold the left mouse button to move toward the cursor, and dash with Space, Shift, or right-click."
+            aria-label="Lux arena. Move with WASD or the arrow keys, hold the left mouse button to move toward the cursor, and dash with your bound key or right-click."
           ></canvas>
+
+          <div id="dash-status" class="dash-status" aria-hidden="true">
+            <svg class="dash-ring" viewBox="0 0 100 100" aria-hidden="true" focusable="false">
+              <circle class="dash-ring-bg" cx="50" cy="50" r="46" />
+              <circle id="dash-ring-fill" class="dash-ring-fill" cx="50" cy="50" r="46" />
+            </svg>
+            <span class="dash-glyph" aria-hidden="true">»</span>
+            <span class="dash-text">Dash</span>
+          </div>
 
           <button id="touch-dash" class="touch-dash" type="button" aria-label="Dash">DASH</button>
 
@@ -253,11 +266,23 @@
             <button id="reduced-toggle" class="toggle" type="button" aria-pressed="false">Off</button>
           </div>
 
+          <div class="setting-row">
+            <div class="setting-text">
+              <span class="setting-name">Dash key</span>
+              <span class="setting-hint" id="dash-key-hint"
+                >Press any key to rebind. Right-click is always available.</span
+              >
+              <span id="dash-key-error" class="setting-error hidden" role="alert"></span>
+            </div>
+            <button id="dash-key-btn" class="keybind-btn" type="button" aria-describedby="dash-key-hint">Space</button>
+          </div>
+
           <button id="settings-close" class="primary" type="button">Done</button>
         </div>
       </div>
 
       <p id="live" class="sr-only" aria-live="polite"></p>
+      <p id="dash-live" class="sr-only" aria-live="polite"></p>
     </div>
 
     <script type="module" src="./lux.ts"></script>
